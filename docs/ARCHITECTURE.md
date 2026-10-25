@@ -74,7 +74,7 @@ POST /api/update/abort   → 删除本批未发布数据 → UpdateJob(Abort)
 ## 前端
 
 - Vue 2.7 + Element UI；路由 history 模式，依赖后端 SPA fallback。
-- 卡片封面统一用 CSS `background-image`（双层：图片 + 季节渐变，容器带 `background-color` 兜底）。
+- 卡片封面统一用 CSS `background-image`（双层：图片 + 季节渐变，容器带 `background-color` 兜底）；每个城市有 10 张景点图，按节日序号分配给不同攻略，避免同城封面重复。
 - 详情正文经 DOMPurify 清洗；`img` 自动加 `loading=lazy`、`decoding=async`、`referrerpolicy=no-referrer` 和失败隐藏。
 - 移动端导航横向滚动 + 分页器 5 个页码，避免 390px 页面横向溢出。
 

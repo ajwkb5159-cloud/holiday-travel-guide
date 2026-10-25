@@ -11,7 +11,7 @@
 - **个性化推荐**：「猜你喜欢」读取本地行为信号（浏览/收藏），后端按目的地/分类/标签/季节/热度打分。
 - **月度数据原子切换**：`begin → batch → complete` 单事务发布，更新期间读接口返回 503「服务器繁忙」，前端全屏遮罩并在恢复后自动刷新。
 - **数据新鲜度**：`/api/system/status` 公开返回 `LastMonthKey` / `LastPublishTime` / `GuideCount` / `DataAgeDays` / `IsStale`，页脚展示更新时间，过期时追加提示。
-- **本地图片**：12 城市 + 10 节日封面全部自托管于 `wwwroot/images/`，不依赖外部图床。
+- **本地图片**：12 城市 × 10 张景点图 + 10 节日封面全部自托管于 `wwwroot/images/`，同一城市不同攻略使用不同景点图，不依赖外部图床。
 - **Windows 服务化**：后端、Updater 均可注册为 Windows 服务；提供部署、服务安装、月度计划任务、Token 轮换脚本。
 
 ## 架构
@@ -127,7 +127,7 @@ dotnet run --project HolidayGuideUpdater -- --run-once --month 202601
     "title": "北京中秋故宫深度游",
     "summary": "……",
     "content": "<h2>……</h2><p>……</p>",
-    "coverImage": "/images/destinations/beijing.jpg",
+    "coverImage": "/images/destinations/beijing-02.jpg",
     "destination": "北京",
     "region": "北京",
     "season": "autumn",
@@ -231,13 +231,16 @@ node scripts/verify-ai.mjs --bin <stage>/backend --source-db <snapshot.db> --por
 
 # 只读浏览器审计：逐页 + 图片真实加载 + 移动端 + 截图
 node scripts/audit-images.mjs --base http://127.0.0.1:5201
+
+# 封面唯一性：120 篇是否 120 张、每城 10 张、全部可加载
+node scripts/audit-covers.mjs --base http://127.0.0.1:5201
 ```
 
 `verify-upgrade` 默认拒绝对 5099 运行（需显式 `--allow-prod`）；`verify-ai` 只终止自己启动的 PID。详细说明见 [`docs/TESTING.md`](docs/TESTING.md)。
 
 ## 图片
 
-城市/节日封面为本地自托管图片，位于 `holiday-travel-guide-web/public/images/`，构建时复制到 `wwwroot/images/`。来源与许可见 [`CREDITS.md`](holiday-travel-guide-web/public/images/CREDITS.md)（Unsplash License，无需署名但在此致谢）。
+城市封面按 `{slug}-01.jpg` … `{slug}-10.jpg` 命名（每个城市 10 张不同景点图），生成器按节日序号分配，保证同一城市 10 篇攻略的封面互不相同；节日封面为 `/images/holidays/{slug}.jpg`。图片位于 `holiday-travel-guide-web/public/images/`，构建时复制到 `wwwroot/images/`。来源与许可见 [`CREDITS.md`](holiday-travel-guide-web/public/images/CREDITS.md)（Unsplash / Pexels License，无需署名但在此致谢）。
 
 ## 安全
 

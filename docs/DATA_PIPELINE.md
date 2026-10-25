@@ -11,7 +11,7 @@
     "title": "北京中秋故宫深度游",
     "summary": "……",
     "content": "<h2>……</h2><p>……</p>",
-    "coverImage": "/images/destinations/beijing.jpg",
+    "coverImage": "/images/destinations/beijing-02.jpg",
     "destination": "北京",
     "region": "北京",
     "season": "autumn",
@@ -37,7 +37,7 @@
 - `externalId` 全局唯一，≤64 字符。
 - `content` 为 HTML；前端 DOMPurify 清洗后渲染。
 - `holidays` 只在批次 0 发送一次，否则会重复插入。
-- 封面路径建议使用本地 `/images/...`；图片源文件在 `holiday-travel-guide-web/public/images/`。
+- 封面路径建议使用本地 `/images/...`；每个城市有 10 张景点图，命名为 `{slug}-01.jpg` … `{slug}-10.jpg`，生成器按节日序号分配，保证同城攻略封面不重复。图片源文件在 `holiday-travel-guide-web/public/images/`。
 
 ## 投料流程
 

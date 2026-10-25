@@ -90,9 +90,14 @@ const PROVIDERS = {
 }
 
 // 图片策略：本地自托管（wwwroot/images），彻底摆脱外链图床故障。
-// 文件由 holiday-travel-guide-web/public/images 随前端构建复制到 wwwroot。
+// 每个城市准备 10 张不同景点图，按节日序号（01-10）分配，保证同城不同攻略封面不重复。
 const HOLIDAY_SLUG_BY_NAME = new Map(HOLIDAYS.map(h => [h.name, h.slug]))
-const coverUrl = (dest) => `/images/destinations/${dest.slug}.jpg`
+const HOLIDAY_INDEX_BY_SLUG = new Map(HOLIDAYS.map((h, i) => [h.slug, i]))
+const coverUrl = (dest, holiday) => {
+  const slug = holiday?.slug || HOLIDAY_SLUG_BY_NAME.get(holiday?.name)
+  const idx = HOLIDAY_INDEX_BY_SLUG.get(slug) ?? 0
+  return `/images/destinations/${dest.slug}-${String(idx + 1).padStart(2, '0')}.jpg`
+}
 const holidayCoverUrl = (holiday) => {
   const slug = holiday.slug || HOLIDAY_SLUG_BY_NAME.get(holiday.name) || 'zhongqiu'
   return `/images/holidays/${slug}.jpg`
@@ -486,7 +491,7 @@ function buildDoc(entries, partialDir, baseline, baselineMonth) {
     if (source === 'baseline') reused++
     else generated++
     // 兜底复用上月内容时，封面也必须切到本地图，避免旧数据把 loremflickr 带回来
-    guides.push({ ...guide, coverImage: coverUrl(entry.dest) })
+    guides.push({ ...guide, coverImage: coverUrl(entry.dest, entry.hol) })
   }
   const holidaySource = baseline?.holidays?.length
     ? baseline.holidays
@@ -592,7 +597,7 @@ async function generateOne(entry, ctx) {
     title,
     summary,
     content: htmlParts.join('\n'),
-    coverImage: coverUrl(entry.dest),
+    coverImage: coverUrl(entry.dest, entry.hol),
     destination: entry.dest.name,
     region: entry.dest.region,
     season: entry.season,
