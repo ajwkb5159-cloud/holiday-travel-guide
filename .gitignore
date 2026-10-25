@@ -1,0 +1,46 @@
+# Build outputs
+**/bin/
+**/obj/
+.vs/
+*.user
+*.suo
+
+# Frontend
+holiday-travel-guide-web/node_modules/
+holiday-travel-guide-web/dist/
+
+# Generated frontend bundle (built into the backend)
+HolidayGuideBackend/wwwroot/
+
+# Runtime data (never commit databases / logs / updater state)
+**/Data/
+HolidayGuideUpdater/data/
+HolidayGuideUpdater/logs/
+**/logs/
+**/state.json
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.db.bak*
+
+# Tests and local scratch space
+.test-env/
+**/shots*/
+**/shots-*/
+test-results/
+playwright-report/
+
+# Secrets and machine-local configuration
+*.key
+.env
+.env.*
+appsettings.Local.json
+appsettings.*.Local.json
+appsettings.json.bak*
+monthly-data.local.bat
+
+# Temporary / residual files
+*.log
+*.tmp
+*.FAILED
+HolidayGuideBackend/test_batch*.json

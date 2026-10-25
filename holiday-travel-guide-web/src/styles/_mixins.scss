@@ -1,0 +1,12 @@
+// 响应式断点 mixin：bp 大于阈值时生效，多用于移动端收窄
+// 断点：1024 平板竖屏 768 手机横屏 640 手机竖屏 480 小屏
+@mixin resp-below($bp) {
+  @media (max-width: $bp) {
+    @content;
+  }
+}
+
+// 常用断点别名，方便模板里语义化使用
+@mixin pad-below { @media (max-width: 1024px) { @content; } }
+@mixin mobile-below { @media (max-width: 768px) { @content; } }
+@mixin small-below { @media (max-width: 480px) { @content; } }

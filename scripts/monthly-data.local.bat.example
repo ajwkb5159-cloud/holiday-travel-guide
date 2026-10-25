@@ -1,0 +1,12 @@
+@echo off
+rem Copy this file to monthly-data.local.bat and adjust for your machine.
+rem monthly-data.local.bat is gitignored and never committed.
+rem
+rem KEYDIR            directory containing .zhipu.key / .siliconflow.key / .dashscope.key
+rem PUBDIR            target folder consumed by HolidayGuideUpdater (data/{yyyyMM}/guides.json)
+rem PRIMARY_PROVIDER  zhipu (free) | dashscope (paid) | siliconflow (free, lower quality)
+rem FALLBACK_PROVIDER fallback when the primary channel fails a piece
+set "KEYDIR=%USERPROFILE%"
+set "PUBDIR=%~dp0..\publish\updater\data"
+set "PRIMARY_PROVIDER=zhipu"
+set "FALLBACK_PROVIDER=siliconflow"

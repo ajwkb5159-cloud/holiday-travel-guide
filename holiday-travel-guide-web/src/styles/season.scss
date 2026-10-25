@@ -1,0 +1,20 @@
+// 四季主题：body[data-season=xxx] 覆写装饰令牌（由 App.vue 按月份设置）
+body[data-season='spring'] {
+  --season-accent: #52C41A;
+  --season-gradient: linear-gradient(135deg, #52C41A 0%, #7ED957 100%);
+}
+
+body[data-season='summer'] {
+  --season-accent: #1CA9C9;
+  --season-gradient: linear-gradient(135deg, #1CA9C9 0%, #3AD6E8 100%);
+}
+
+body[data-season='autumn'] {
+  --season-accent: #FF7A45;
+  --season-gradient: linear-gradient(135deg, #FF7A45 0%, #FFB627 100%);
+}
+
+body[data-season='winter'] {
+  --season-accent: #4A7DB4;
+  --season-gradient: linear-gradient(135deg, #4A7DB4 0%, #7FA8D4 100%);
+}

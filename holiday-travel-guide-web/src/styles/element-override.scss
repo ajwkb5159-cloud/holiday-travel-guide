@@ -1,0 +1,36 @@
+// Element UI 品牌化集中覆盖：圆角、主色、卡片阴影
+.el-button {
+  border-radius: 10px;
+}
+
+.el-button--primary {
+  background-color: var(--primary);
+  border-color: var(--primary);
+}
+
+.el-button--primary:hover,
+.el-button--primary:focus {
+  // 随季节主题联动（--season-accent 由 body[data-season] 切换），不再硬编码
+  background-color: var(--season-accent);
+  border-color: var(--season-accent);
+  filter: brightness(1.07);
+}
+
+.el-card {
+  border-radius: var(--radius-card);
+  border: none;
+  box-shadow: var(--shadow-card);
+}
+
+.el-pagination {
+  text-align: center;
+  margin-top: 24px;
+}
+
+.el-input__inner {
+  border-radius: 10px;
+}
+
+.el-tag {
+  border-radius: 8px;
+}

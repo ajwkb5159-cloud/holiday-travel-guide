@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="HolidayGuideBackend/HolidayGuideBackend.csproj" />
+  <Project Path="HolidayGuideUpdater/HolidayGuideUpdater.csproj" />
+</Solution>

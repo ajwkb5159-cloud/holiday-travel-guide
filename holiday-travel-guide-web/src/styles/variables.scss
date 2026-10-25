@@ -1,0 +1,14 @@
+// 品牌与季节令牌：季节主题只改 --season-* 装饰变量，品牌主色固定
+:root {
+  --primary: #FF7A45;
+  --ocean: #1CA9C9;
+  --gold: #FFB627;
+  --bg: #F7F5F2;
+  --text-main: #2D2A26;
+  --text-sub: #8A857D;
+  --radius-card: 16px;
+  --shadow-card: 0 4px 16px rgba(45, 42, 38, 0.06);
+  --shadow-card-hover: 0 8px 24px rgba(45, 42, 38, 0.12);
+  --season-accent: #FF7A45;
+  --season-gradient: linear-gradient(135deg, #FF7A45 0%, #FFB627 100%);
+}
