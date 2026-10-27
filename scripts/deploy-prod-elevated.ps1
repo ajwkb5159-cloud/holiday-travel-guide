@@ -68,13 +68,20 @@ $updaterCfg = Join-Path $PublishRoot 'updater\appsettings.json'
 if (Test-Path $backendCfg) { Copy-Item $backendCfg (Join-Path $BackupRoot 'appsettings.backend.prod.json') -Force }
 if (Test-Path $updaterCfg) { Copy-Item $updaterCfg (Join-Path $BackupRoot 'appsettings.updater.prod.json') -Force }
 
-$aiKeyLen = 0
+$aiKeyConfigured = $false
+$aiKeySource = ''
 if (Test-Path $backendCfg) {
   $prodCfg = Get-Content $backendCfg -Raw | ConvertFrom-Json
-  if ($prodCfg.Ai -and $prodCfg.Ai.ApiKey) { $aiKeyLen = ([string]$prodCfg.Ai.ApiKey).Length }
+  if ($prodCfg.Ai -and $prodCfg.Ai.ApiKey) {
+    $aiKeyConfigured = $true
+    $aiKeySource = 'inline ApiKey'
+  } elseif ($prodCfg.Ai -and $prodCfg.Ai.ApiKeyFile -and (Test-Path ([string]$prodCfg.Ai.ApiKeyFile))) {
+    $aiKeyConfigured = $true
+    $aiKeySource = [string]$prodCfg.Ai.ApiKeyFile
+  }
 }
-L ("prod Ai.ApiKey length after deploy = " + $aiKeyLen)
-if ($RequireAiKey -and $aiKeyLen -le 0) { L 'ERROR: prod Ai.ApiKey is empty (RequireAiKey)' }
+L ("prod Ai key configured = " + $aiKeyConfigured + " source = " + $aiKeySource)
+if ($RequireAiKey -and -not $aiKeyConfigured) { L 'ERROR: prod Ai key is not configured (RequireAiKey)' }
 
 if (-not $SkipBackend) {
   sc.exe start $BackendService | Out-Null
@@ -88,5 +95,5 @@ try {
   L ('status after deploy: HTTP ' + $r.StatusCode)
 } catch { L ('status check failed: ' + $_.Exception.Message) }
 
-if ($RequireAiKey -and $aiKeyLen -le 0) { L '=== deploy finished WITH ERRORS ==='; exit 1 }
+if ($RequireAiKey -and -not $aiKeyConfigured) { L '=== deploy finished WITH ERRORS ==='; exit 1 }
 L '=== deploy done ==='
