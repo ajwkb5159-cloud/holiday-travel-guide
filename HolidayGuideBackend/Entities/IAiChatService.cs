@@ -17,13 +17,19 @@ public class AiChatTurn
     /// <summary>user | assistant</summary>
     public string Role { get; set; } = string.Empty;
     public string Content { get; set; } = string.Empty;
+
+    /// <summary>
+    /// assistant 轮可选的推理内容（DeepSeek 系模型要求历史 assistant 消息回传 reasoning_content）。
+    /// 前端不展示，只用于多轮兼容。
+    /// </summary>
+    public string? ReasoningContent { get; set; }
 }
 
 /// <summary>回答中引用的站内攻略（SSE sources 事件负载，前端渲染可点击卡片）</summary>
 public record AiSourceDto(int Index, int Id, string Title, string Destination, string CoverImage);
 
-/// <summary>额度快照（GET /api/ai/quota 与 SSE done 事件共用）</summary>
-public record AiQuotaDto(int Limit, int Remaining);
+/// <summary>额度快照（GET /api/ai/quota 与 SSE done 事件共用）；Unlimited=true 时 Limit/Remaining 为 -1</summary>
+public record AiQuotaDto(int Limit, int Remaining, bool Unlimited = false);
 
 /// <summary>SSE 流式问答服务契约</summary>
 public interface IAiChatService

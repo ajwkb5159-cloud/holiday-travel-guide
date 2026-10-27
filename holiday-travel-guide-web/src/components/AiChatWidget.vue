@@ -8,7 +8,7 @@
             <span class="head-icon">🤖</span>
             <div>
               <div class="head-name">AI 行程助手</div>
-              <div class="head-sub">{{ quotaExhausted ? '今日次数已用完' : '基于站内攻略的智能规划' }}</div>
+              <div class="head-sub">基于站内攻略的智能规划</div>
             </div>
           </div>
           <button class="head-close" title="收起" @click="open = false">✕</button>
@@ -51,15 +51,13 @@
             type="text"
             maxlength="500"
             placeholder="例如：国庆北京3日游？"
-            :disabled="quotaExhausted"
             @keyup.enter="send()"
           />
-          <button class="send-btn" :disabled="!draft || sending || quotaExhausted" @click="send()">
+          <button class="send-btn" :disabled="!draft || sending" @click="send()">
             {{ sending ? '…' : '发送' }}
           </button>
         </div>
         <div class="panel-foot">
-          <template v-if="remaining != null">今日剩余 {{ remaining }}/{{ limit }} 次 · </template>
           AI 生成内容仅供参考，出行前请核实票务与开放信息
         </div>
       </div>
@@ -68,13 +66,12 @@
     <!-- 悬浮球（与回到顶部按钮上下错位） -->
     <button class="ai-ball" title="AI 行程助手" @click="toggleOpen">
       <span class="ball-icon">🤖</span>
-      <span v-if="remaining != null && remaining <= 3" class="ball-badge">{{ remaining }}</span>
     </button>
   </div>
 </template>
 
 <script>
-import { getAiStatus, getAiQuota, streamChat } from '@/api/ai'
+import { getAiStatus, streamChat } from '@/api/ai'
 
 const QUICK_PROMPTS = ['国庆节去哪玩人少？', '推荐一个 3 天的亲子游', '冬天适合去哪看雪？', '带父母出游有什么建议？']
 
@@ -88,10 +85,6 @@ export default {
       sending: false,
       messages: [],
       sources: [], // 最新回答的引用（挂在对应消息上）
-      remaining: null,
-      limit: null,
-      quotaLoaded: false,
-      quotaExhausted: false,
       lastQuestion: ''
     }
   },
@@ -107,18 +100,8 @@ export default {
   methods: {
     toggleOpen() {
       this.open = !this.open
-      if (this.open && !this.quotaLoaded) {
-        this.quotaLoaded = true
-        getAiQuota()
-          .then(q => {
-            this.remaining = q.Remaining
-            this.limit = q.Limit
-            this.quotaExhausted = q.Remaining <= 0
-            if (this.messages.length === 0 && !this.quotaExhausted) {
-              this.messages.push({ role: 'ai', text: '你好！我是站内 AI 行程助手 🎒\n可以问我节假日出行安排，我会结合站内攻略给你定制建议～' })
-            }
-          })
-          .catch(() => { /* 额度未知不阻塞使用；发送失败时再提示 */ })
+      if (this.open && this.messages.length === 0) {
+        this.messages.push({ role: 'ai', welcome: true, text: '你好！我是站内 AI 行程助手 🎒\n可以问我节假日出行安排，我会结合站内攻略给你定制建议～' })
       }
     },
     goGuide(id) {
@@ -126,11 +109,16 @@ export default {
       this.$router.push(`/guides/${id}`)
     },
     buildHistory() {
-      // 最近 3 轮（6 条）作为上下文，剔除错误气泡与打字光标
+      // 1M 上下文：尽量多带历史，后端再按字符预算裁剪；欢迎气泡不进入历史
       return this.messages
-        .filter(m => !m.error && !m.typing && m.text)
-        .slice(-6)
-        .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }))
+        .filter(m => !m.error && !m.typing && !m.welcome && m.text)
+        .slice(-500)
+        .map(m => {
+          const turn = { role: m.role === 'user' ? 'user' : 'assistant', content: m.text }
+          // DeepSeek 系模型可能要求 assistant 历史回传 reasoning_content；空值不发送
+          if (m.role !== 'user' && m.reasoning) turn.ReasoningContent = m.reasoning
+          return turn
+        })
     },
     scrollToBottom() {
       this.$nextTick(() => {
@@ -145,26 +133,23 @@ export default {
       this.draft = ''
       this.sending = true
 
-      const aiMsg = { role: 'ai', text: '', typing: true, sources: [] }
+      // 先取历史再 push 当前问题，避免把当前问题既放进 History 又作为 Question 发两次
+      const history = this.buildHistory()
+      const aiMsg = { role: 'ai', text: '', reasoning: '', typing: true, sources: [] }
       this.messages.push({ role: 'user', text: q }, aiMsg)
       this.scrollToBottom()
 
       let received = false
       streamChat({
         question: q,
-        history: this.buildHistory(),
+        history,
         onDelta: (t) => {
           received = true
           aiMsg.text += t
           this.scrollToBottom()
         },
-        onSources: (list) => { aiMsg.sources = list },
-        onDone: (p) => {
-          if (typeof p.Remaining === 'number') {
-            this.remaining = p.Remaining
-            this.limit = p.Limit
-          }
-        }
+        onReasoning: (t) => { aiMsg.reasoning += t },
+        onSources: (list) => { aiMsg.sources = list }
       })
         .then(() => {
           aiMsg.typing = false
@@ -178,10 +163,6 @@ export default {
           } else {
             aiMsg.error = true
             aiMsg.text = this.friendlyError(err)
-            if (err.status === 429 && err.data && typeof err.data.Remaining === 'number') {
-              this.quotaExhausted = true
-              this.remaining = err.data.Remaining
-            }
           }
         })
         .finally(() => {
@@ -191,9 +172,7 @@ export default {
     },
     friendlyError(err) {
       if (err.status === 429) {
-        return err.data && typeof err.data.Remaining === 'number'
-          ? '今日免费咨询次数已用完，明天再来吧～'
-          : (err.message || '当前咨询人数较多，请稍后再试')
+        return err.message || '当前咨询人数较多，请稍后再试'
       }
       if (err.status === 503) return '服务器繁忙，请稍后重试'
       if (err.status === 501) { this.aiEnabled = false; return 'AI 功能未开启' }
@@ -228,23 +207,6 @@ export default {
 
 .ball-icon {
   line-height: 1;
-}
-
-.ball-badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  background: #f56c6c;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 // ---------- 对话面板 ----------

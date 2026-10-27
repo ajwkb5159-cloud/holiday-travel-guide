@@ -44,11 +44,12 @@ export async function getAiQuota() {
  * @param {string} o.question 用户问题
  * @param {Array<{role:string,content:string}>} [o.history] 最近上下文
  * @param {(text:string)=>void} [o.onDelta] 增量文本
+ * @param {(text:string)=>void} [o.onReasoning] 推理增量（不展示，仅用于多轮历史回传）
  * @param {(sources:Array)=>void} [o.onSources] 引用攻略列表 [{Index,Id,Title,Destination,CoverImage}]
  * @param {(payload:{Limit:number,Remaining:number})=>void} [o.onDone] 正常结束
  * @param {AbortSignal} [o.signal] 中断
  */
-export async function streamChat({ question, history, onDelta, onSources, onDone, signal }) {
+export async function streamChat({ question, history, onDelta, onReasoning, onSources, onDone, signal }) {
   const resp = await fetch(`${BASE}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -83,6 +84,7 @@ export async function streamChat({ question, history, onDelta, onSources, onDone
     try { payload = JSON.parse(datas.join('\n')) } catch (e) { payload = null }
     if (payload === null) return
     if (evt === 'delta' && onDelta && payload.Text != null) onDelta(payload.Text)
+    else if (evt === 'reasoning' && onReasoning && payload.Text != null) onReasoning(payload.Text)
     else if (evt === 'sources' && onSources) onSources(payload || [])
     else if (evt === 'done' && onDone) onDone(payload || {})
     else if (evt === 'error') {

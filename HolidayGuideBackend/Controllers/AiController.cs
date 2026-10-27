@@ -40,7 +40,7 @@ public class AiController : ControllerBase
     {
         var ip = ClientIpResolver.Resolve(HttpContext);
         var quota = await _quota.GetQuotaAsync(ip);
-        return Ok(ApiResult<object>.Ok(new { _opts.Enabled, quota.Limit, quota.Remaining }));
+        return Ok(ApiResult<object>.Ok(new { _opts.Enabled, quota.Limit, quota.Remaining, quota.Unlimited }));
     }
 
     /// <summary>SSE 流式问答。请求体 {Question, History?}；事件 delta/sources/done/error</summary>

@@ -40,8 +40,9 @@ builder.Services.AddSingleton<IAiQuotaService, AiQuotaService>();
 builder.Services.AddScoped<IAiChatService, AiChatService>();
 builder.Services.AddHttpClient(AiChatService.HttpClientName, c =>
 {
-    // 流式响应整体读取上限；单次对话由内部 120s CTS 具体控制，这里留足余量
-    c.Timeout = TimeSpan.FromSeconds(150);
+    // 流式响应整体读取上限；单次对话由内部 Ai:TimeoutSeconds CTS 控制，这里留 30s 余量
+    var aiTimeout = builder.Configuration.GetValue<int?>("Ai:TimeoutSeconds") ?? 120;
+    c.Timeout = TimeSpan.FromSeconds(Math.Clamp(aiTimeout, 30, 600) + 30);
 });
 
 builder.Services.AddControllers()

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { execSync, spawn } from 'node:child_process'
 import { createServer } from 'node:net'
+import { startMockAi } from './lib/mock-ai-upstream.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const require = createRequire(import.meta.url)
@@ -22,6 +23,35 @@ if (!PROD_DB) {
   process.exit(2)
 }
 const PORT_START = Number(argVal('--port-start', '5199'))
+
+// ---------- AI provider 参数（默认 OpenCode Go） ----------
+const EXPLICIT_KEY_FILE = argVal('--key-file', process.env.AI_TEST_KEY_FILE || '')
+const EXPLICIT_BASE = argVal('--base-url', process.env.AI_TEST_BASE_URL || '')
+const EXPLICIT_MODEL = argVal('--model', process.env.AI_TEST_MODEL || '')
+const API_KEY = argVal('--api-key', process.env.AI_TEST_API_KEY || '')
+const DEFAULT_OPENCODE_KEY = 'F:\\HolidayGuide\\secrets\\opencode.key'
+const KEY_FILE = EXPLICIT_KEY_FILE || DEFAULT_OPENCODE_KEY
+let INLINE_KEY = API_KEY
+if (!INLINE_KEY && /\.json$/i.test(KEY_FILE)) {
+  try {
+    const doc = JSON.parse(readFileSync(KEY_FILE, 'utf-8'))
+    INLINE_KEY = String(doc?.['opencode-go']?.key || '').trim()
+  } catch { /* fall through */ }
+}
+const GOOD_UPSTREAM = EXPLICIT_BASE || 'https://opencode.ai/zen/go/v1/chat/completions'
+const AI_MODEL = EXPLICIT_MODEL || 'deepseek-v4.1-flash'
+const MAX_TOKENS = Number(argVal('--max-tokens', process.env.AI_TEST_MAX_TOKENS || '3000'))
+const SEND_REASONING = args.includes('--send-reasoning') || process.env.AI_TEST_SEND_REASONING === '1'
+const MOCK_ONLY = args.includes('--mock-only')
+const HAS_REAL_KEY = !!INLINE_KEY || existsSync(KEY_FILE)
+if (!HAS_REAL_KEY && !MOCK_ONLY) {
+  console.error(`[verify-ai] 未找到真实 key：${KEY_FILE}。可用 --key-file/--api-key，或 --mock-only 只跑 mock 解析器测试`)
+  process.exit(2)
+}
+if (!MOCK_ONLY) {
+  console.log(`[verify-ai] provider=${GOOD_UPSTREAM} model=${AI_MODEL} key=${INLINE_KEY ? '(inline)' : KEY_FILE} sendReasoning=${SEND_REASONING}`)
+}
+
 const RUN = join(ROOT, '.test-env', 'ai-run')
 const SHOTS = join(ROOT, '.test-env', 'shots-ai')
 if (!Number.isInteger(PORT_START) || PORT_START === 5099 || PORT_START < 1024) {
@@ -64,7 +94,10 @@ let proc = null
 const PORT = await probePort(PORT_START)
 const BASE = `http://127.0.0.1:${PORT}`
 
-function makeAppsettings({ enabled, baseUrl, dailyIpQuota, globalCap }) {
+function makeAppsettings({ enabled, baseUrl, dailyIpQuota, globalCap, apiKey = '', maxTokens = MAX_TOKENS, sendReasoning = SEND_REASONING }) {
+  const isMock = /127\.0\.0\.1|localhost/.test(baseUrl)
+  const effectiveKey = apiKey || (isMock ? 'mock-key' : INLINE_KEY)
+  const effectiveKeyFile = effectiveKey ? '' : KEY_FILE
   return JSON.stringify({
     Logging: { LogLevel: { Default: 'Warning' } },
     AllowedHosts: '*',
@@ -73,8 +106,18 @@ function makeAppsettings({ enabled, baseUrl, dailyIpQuota, globalCap }) {
     Ai: {
       Enabled: enabled,
       BaseURL: baseUrl,
-      ApiKey: '',
-      Model: 'qwen-flash',
+      ApiKey: effectiveKey,
+      ApiKeyFile: effectiveKeyFile,
+      Model: AI_MODEL,
+      MaxTokens: maxTokens,
+      Temperature: 0.7,
+      TimeoutSeconds: 180,
+      SendReasoningContent: sendReasoning,
+      QuotaEnabled: false,
+      HistoryMaxTurns: 500,
+      HistoryMaxChars: 1500000,
+      HistoryPerMessageChars: 50000,
+      ExtraBodyJson: '',
       DailyIpQuota: dailyIpQuota,
       GlobalDailyCap: globalCap,
       RetrieveTopK: 6,
@@ -84,7 +127,6 @@ function makeAppsettings({ enabled, baseUrl, dailyIpQuota, globalCap }) {
   }, null, 2)
 }
 
-const GOOD_UPSTREAM = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
 const BAD_UPSTREAM = 'http://127.0.0.1:9/v1/chat/completions' // discard 端口，连接必败
 
 function stopServer() {
@@ -131,12 +173,14 @@ async function api(path, opts = {}) {
 const utf8Body = (obj) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: Buffer.from(JSON.stringify(obj), 'utf8') })
 
 /** 消费一次 AI 对话直到终态，返回 {events:[{event,data}], finalStatus} */
-async function aiChat(question, ip) {
+async function aiChat(question, ip, history = null) {
   const headers = { 'Content-Type': 'application/json' }
   if (ip) headers['X-Forwarded-For'] = ip
+  const payload = { Question: question }
+  if (history) payload.History = history
   const r = await fetch(`${BASE}/api/ai/chat`, {
     method: 'POST', headers,
-    body: Buffer.from(JSON.stringify({ Question: question }), 'utf8')
+    body: Buffer.from(JSON.stringify(payload), 'utf8')
   })
   if (r.status !== 200) {
     const body = await r.json().catch(() => null)
@@ -169,6 +213,43 @@ async function aiChat(question, ip) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms))
 
+async function runMockPhases() {
+  console.log('\n[M1] mock SSE 解析器（空 choices + reasoning + delta）')
+  const mock = await startMockAi({ mode: 'sse' })
+  try {
+    await startServer({ enabled: true, baseUrl: mock.baseUrl, dailyIpQuota: 5, globalCap: 20 })
+    const r = await aiChat('mock 测试', '10.0.0.1')
+    record('mock SSE 返回 delta', r.status === 200 && r.events.some(e => e.event === 'delta'), `events=${r.events.map(e => e.event).join(',')}`)
+    record('mock SSE 不因空 choices 崩溃', !r.events.some(e => e.event === 'error'))
+    record('mock SSE 正常 done', r.events.some(e => e.event === 'done'))
+    if (SEND_REASONING) record('mock SSE reasoning 事件', r.events.some(e => e.event === 'reasoning'))
+  } finally {
+    await mock.close()
+  }
+
+  console.log('\n[M2] mock JSON 回退（非 SSE 200）')
+  const mockJson = await startMockAi({ mode: 'json' })
+  try {
+    await startServer({ enabled: true, baseUrl: mockJson.baseUrl, dailyIpQuota: 5, globalCap: 20 })
+    const r = await aiChat('mock json 测试', '10.0.0.2')
+    record('非 SSE 200 回退为 delta', r.status === 200 && r.events.some(e => e.event === 'delta'), `events=${r.events.map(e => e.event).join(',')}`)
+    record('JSON 回退正常 done', r.events.some(e => e.event === 'done'))
+  } finally {
+    await mockJson.close()
+  }
+  stopServer()
+}
+
+function summarize() {
+  const pass = results.filter(r => r.ok).length
+  console.log(`\n========== verify-ai 汇总：${pass}/${results.length} 通过 ==========`)
+  if (failed) {
+    console.log('失败项：')
+    results.filter(r => !r.ok).forEach(r => console.log(`  ✗ ${r.n} — ${r.d}`))
+    process.exit(1)
+  }
+}
+
 // ================= 主流程 =================
 async function main() {
   console.log(`[verify-ai] port=${PORT}`)
@@ -178,11 +259,20 @@ async function main() {
 
   // 复制构建产物 + 快照库
   cpSync(BIN, RUN, { recursive: true })
+  // bin/Debug 里的 wwwroot 可能是旧副本；测试栈必须用刚 build 出来的最新前端
+  const latestWwwroot = join(ROOT, 'HolidayGuideBackend', 'wwwroot')
+  if (existsSync(latestWwwroot)) cpSync(latestWwwroot, join(RUN, 'wwwroot'), { recursive: true })
   if (!existsSync(join(RUN, 'HolidayGuideBackend.exe'))) throw new Error('build output missing, run dotnet build first')
   if (!existsSync(PROD_DB)) throw new Error('prod db snapshot missing')
   cpSync(PROD_DB, join(RUN, 'Data', 'holiday.db'))
 
-  // ---------- 阶段1：AI 开启（小额度便于限流测试） ----------
+  if (MOCK_ONLY) {
+    await runMockPhases()
+    summarize()
+    return
+  }
+
+  // ---------- 阶段1：AI 开启（无每日额度限制） ----------
   await startServer({ enabled: true, baseUrl: GOOD_UPSTREAM, dailyIpQuota: 2, globalCap: 5 })
 
   console.log('\n[1] 推荐 API（/api/guide/recommend）')
@@ -213,10 +303,10 @@ async function main() {
     record('/api/ai/status enabled=true', st.body.Data.Enabled === true)
 
     const q1 = await api('/api/ai/quota', { headers: { 'X-Forwarded-For': '6.6.6.1' } })
-    record('quota 初始满额(2)', q1.body.Data.Remaining === 2 && q1.body.Data.Limit === 2, JSON.stringify(q1.body.Data))
+    record('quota 无每日限制', q1.body.Data.Unlimited === true && q1.body.Data.Limit === -1 && q1.body.Data.Remaining === -1, JSON.stringify(q1.body.Data))
 
     const q2 = await api('/api/ai/quota')
-    record('quota 无 XFF 回退 RemoteIp', q2.body.Data.Remaining === 2, JSON.stringify(q2.body.Data))
+    record('quota 无 XFF 也返回 Unlimited', q2.body.Data.Unlimited === true, JSON.stringify(q2.body.Data))
   }
 
   // ---------- 阶段2：浏览器 UI ----------
@@ -279,14 +369,14 @@ async function main() {
     await shot('04-jump-detail')
   }
 
-  // 回到首页再开面板：剩余额度应为 1（本 IP 已耗 1）
+  // 回到首页再开面板：无限额度下不显示剩余次数
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' })
   await sleep(1200)
   await page.locator('.ai-ball').click()
   await sleep(800)
   const foot = await page.locator('.panel-foot').innerText().catch(() => '')
-  record('额度角标同步（剩1/2）', /剩余 1\/2/.test(foot.replace(/\s+/g, ' ')), foot.trim().slice(0, 26))
-  await shot('05-quota-badge')
+  record('不显示额度角标', !/剩余/.test(foot) && !/\/2/.test(foot), foot.trim().slice(0, 26))
+  await shot('05-no-quota-badge')
   await page.keyboard.press('Escape')
   await page.locator('.head-close').click()
 
@@ -330,50 +420,40 @@ async function main() {
   }
   await browser.close()
 
-  // ---------- 阶段3：限流（IP 维度 + 全局兜底，node 直发带 XFF） ----------
-  console.log('\n[5] 限流（DailyIpQuota=2 / GlobalDailyCap=5）')
+  // ---------- 阶段3：无限对话（同 IP 连续多问不 429） ----------
+  console.log('\n[5] 无限对话（QuotaEnabled=false）')
   {
-    // 注意：global 已被 UI 对话消耗 1（127.0.0.1），余量 4
-    const r1 = await aiChat('测试问题一', '7.7.7.1')
-    record('新 IP 首问成功', r1.status === 200 && r1.events.some(e => e.event === 'delta'))
-
-    const r2 = await aiChat('测试问题二', '7.7.7.1')
-    record('同 IP 第二问成功(达 IP 上限)', r2.status === 200)
-
-    const r3 = await aiChat('测试问题三', '7.7.7.1')
-    record('同 IP 第三问 429', r3.status === 429, `msg=${r3.body && r3.body.msg}`)
-
-    const qOther = await api('/api/ai/quota', { headers: { 'X-Forwarded-For': '7.7.7.2' } })
-    record('其它 IP 不受影响', qOther.body.Data.Remaining === 2, JSON.stringify(qOther.body.Data))
-
-    // global 余量：UI 1 + 7.7.7.1 两问 = 3，还差 2 次打满
-    const rb = await aiChat('测试四', '7.7.7.2')
-    record('IP-B 第一问成功(global=4)', rb.status === 200)
-    const rc = await aiChat('测试五', '7.7.7.3')
-    record('IP-C 第一问成功(global=5 满)', rc.status === 200)
-
-    const rd = await aiChat('测试六', '7.7.7.4')
-    record('全局打满后新 IP 亦 429', rd.status === 429, `msg=${rd.body && rd.body.msg}`)
-
-    const qFull = await api('/api/ai/quota', { headers: { 'X-Forwarded-For': '8.8.8.8' } })
-    record('全新 IP Remaining=0（全局兜底）', qFull.body.Data.Remaining === 0, JSON.stringify(qFull.body.Data))
+    for (let i = 1; i <= 3; i++) {
+      const r = await aiChat(`测试问题${i}`, '7.7.7.1')
+      record(`同 IP 第 ${i} 问成功（无 429）`, r.status === 200 && r.events.some(e => e.event === 'delta'), `status=${r.status}`)
+    }
+    const q = await api('/api/ai/quota', { headers: { 'X-Forwarded-For': '7.7.7.1' } })
+    record('连续问答后仍 Unlimited', q.body.Data.Unlimited === true, JSON.stringify(q.body.Data))
   }
 
-  // ---------- 阶段4：坏上游 → error 事件且不计费 ----------
-  console.log('\n[6] 上游故障不计费')
+  // ---------- 阶段3b：多轮对话（验证 reasoning_content 历史兼容） ----------
+  console.log('\n[5b] 多轮对话（reasoning 历史兼容）')
   {
-    // 放大 globalCap 绕开阶段3已打满的全局计数，专测「上游失败不扣 IP 额度」
+    await startServer({ enabled: true, baseUrl: GOOD_UPSTREAM, dailyIpQuota: 4, globalCap: 50 })
+    const history = [
+      { Role: 'user', Content: '北京有什么必去的景点？' },
+      { Role: 'assistant', Content: '故宫、长城、颐和园。' }
+    ]
+    if (SEND_REASONING) history[1].ReasoningContent = '用户问北京景点，需要列举三个代表景点。'
+    const mt = await aiChat('再推荐一个适合亲子的', '7.7.7.9', history)
+    record('多轮对话返回 delta', mt.status === 200 && mt.events.some(e => e.event === 'delta'), `status=${mt.status} events=${mt.events.map(e => e.event).join(',')}`)
+    record('多轮对话无 error', !mt.events.some(e => e.event === 'error'), mt.events.find(e => e.event === 'error')?.data?.Message || '')
+  }
+
+  // ---------- 阶段4：坏上游 → error 事件 ----------
+  console.log('\n[6] 上游故障')
+  {
     await startServer({ enabled: true, baseUrl: BAD_UPSTREAM, dailyIpQuota: 2, globalCap: 50 })
-    const before = await api('/api/ai/quota', { headers: { 'X-Forwarded-For': '9.9.9.9' } })
     const bad = await aiChat('你好', '9.9.9.9')
     const gotError = bad.events.some(e => e.event === 'error')
     record('坏上游收到 SSE error 事件', gotError || bad.status !== 200, `status=${bad.status} events=${bad.events.map(e => e.event).join(',')}`)
-    const after = await api('/api/ai/quota', { headers: { 'X-Forwarded-For': '9.9.9.9' } })
-    record('失败请求不消耗额度', after.body.Data.Remaining === before.body.Data.Remaining, `${before.body.Data.Remaining}→${after.body.Data.Remaining}`)
-
-    // AiQuota 表持久化：重启后计数仍在（global 应 ≥5 中的一部分）
-    const persisted = await api('/api/ai/quota', { headers: { 'X-Forwarded-For': '7.7.7.1' } })
-    record('AiQuota 跨重启持久化', persisted.body.Data.Remaining < 2, JSON.stringify(persisted.body.Data))
+    const q = await api('/api/ai/quota', { headers: { 'X-Forwarded-For': '9.9.9.9' } })
+    record('坏上游后额度仍 Unlimited', q.body.Data.Unlimited === true, JSON.stringify(q.body.Data))
   }
 
   // ---------- 阶段5：AI 关闭 → 501 + 悬浮球隐藏 ----------
@@ -396,15 +476,7 @@ async function main() {
   }
 
   stopServer()
-
-  // ---------- 汇总 ----------
-  const pass = results.filter(r => r.ok).length
-  console.log(`\n========== verify-ai 汇总：${pass}/${results.length} 通过 ==========`)
-  if (failed) {
-    console.log('失败项：')
-    results.filter(r => !r.ok).forEach(r => console.log(`  ✗ ${r.n} — ${r.d}`))
-    process.exit(1)
-  }
+  summarize()
 }
 
 main().catch(e => {
