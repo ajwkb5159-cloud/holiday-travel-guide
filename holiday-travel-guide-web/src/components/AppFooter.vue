@@ -4,6 +4,7 @@
     <p v-if="publishTime" class="sub" :class="{ stale }">
       {{ publishTime }}<span v-if="stale"> · 数据可能已过期</span>
     </p>
+    <p class="sub"><router-link to="/image-credits">图片来源与许可</router-link></p>
     <p class="sub">© {{ year }} Holiday Travel Guide</p>
   </footer>
 </template>
@@ -55,6 +56,15 @@ export default {
 
   .sub {
     font-size: 12px;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+
+    &:hover {
+      color: var(--season-accent);
+    }
   }
 
   .stale {

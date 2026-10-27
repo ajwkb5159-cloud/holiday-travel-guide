@@ -17,6 +17,7 @@ const router = new VueRouter({
     { path: '/search', name: 'search', component: () => import('@/views/Search/SearchView.vue'), meta: { title: '搜索' } },
     { path: '/tags', name: 'tags', component: () => import('@/views/Tag/TagView.vue'), meta: { title: '标签云' } },
     { path: '/favorites', name: 'favorites', component: () => import('@/views/Favorite/FavoriteView.vue'), meta: { title: '我的收藏' } },
+    { path: '/image-credits', name: 'image-credits', component: () => import('@/views/Credits/ImageCreditsView.vue'), meta: { title: '图片来源与许可' } },
     { path: '*', redirect: '/' }
   ],
   scrollBehavior: () => ({ x: 0, y: 0 })

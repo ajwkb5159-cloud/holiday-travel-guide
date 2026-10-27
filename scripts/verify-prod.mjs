@@ -27,6 +27,8 @@ rec('列表卡片数>0', cards > 0, `cards=${cards}`)
 
 const id = await page.evaluate(async () => (await fetch('/api/guide?page=1&size=1').then(x => x.json())).Data.Items[0].Id)
 r = await goto(`/guides/${id}`); rec('攻略详情深链', r.status() === 200)
+const creditText = await page.locator('.hero-credit').first().innerText().catch(() => '')
+rec('详情页图片来源署名', /图：/.test(creditText), creditText.slice(0, 48))
 await page.screenshot({ path: join(SHOTS, 'detail.png') })
 
 r = await goto('/search?q=' + encodeURIComponent('北京')); rec('搜索直开', r.status() === 200)
@@ -41,6 +43,10 @@ rec('刷新搜索复现', after > 0, `cards=${after}`)
 r = await goto('/destinations/' + encodeURIComponent('北京')); rec('目的地详情深链', r.status() === 200)
 r = await goto('/favorites'); rec('收藏页', r.status() === 200)
 r = await goto('/holidays'); rec('节假日页', r.status() === 200)
+r = await goto('/image-credits'); rec('图片来源页', r.status() === 200)
+const creditCards = await page.locator('.credit-card').count()
+rec('图片来源卡片>0', creditCards > 0, `cards=${creditCards}`)
+await page.screenshot({ path: join(SHOTS, 'image-credits.png') })
 
 const jsErr = []
 page.on('pageerror', e => jsErr.push(e.message))

@@ -1,6 +1,6 @@
 // 封面唯一性审计：全量攻略的 coverImage 是否 120 篇 120 张、每城 10 张、全部可加载。
 // 用法：node scripts/audit-covers.mjs --base http://127.0.0.1:5201
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
@@ -65,6 +65,15 @@ const probe = await page.evaluate(async (urls) => {
 const ok = probe.filter(x => x.ok)
 const failed = probe.filter(x => !x.ok)
 const p = (arr, q) => arr.length ? [...arr].sort((a, b) => a - b)[Math.min(arr.length - 1, Math.ceil(q / 100 * arr.length) - 1)] : null
+
+// 署名清单：封面路径可能带 ?v=yyyyMM，查表时剥离 query
+let creditsOk = false
+try {
+  const credits = JSON.parse(readFileSync(join(ROOT, 'holiday-travel-guide-web', 'public', 'images', 'credits.json'), 'utf-8'))
+  const credited = new Set((credits.images || []).map(x => x.path))
+  creditsOk = unique.every(u => credited.has(String(u).split('?')[0]))
+} catch { creditsOk = false }
+
 const report = {
   base: BASE,
   totalGuides: items.length,
@@ -72,6 +81,7 @@ const report = {
   perDestination: perDestCounts,
   allDestinationsTen: Object.values(perDestCounts).every(n => n === 10),
   allCoversLocal: unique.every(u => typeof u === 'string' && u.startsWith('/images/destinations/')),
+  creditsOk,
   probe: {
     total: probe.length,
     ok: ok.length,
@@ -84,6 +94,7 @@ const report = {
 writeFileSync(join(OUT, 'cover-audit.json'), JSON.stringify(report, null, 2))
 console.log(JSON.stringify(report, null, 2))
 await browser.close()
-const pass = report.totalGuides === 120 && report.uniqueCovers === 120 && report.allDestinationsTen && report.allCoversLocal && failed.length === 0
+const pass = report.totalGuides === 120 && report.uniqueCovers === 120 && report.allDestinationsTen &&
+  report.allCoversLocal && report.creditsOk && failed.length === 0
 console.log(pass ? 'COVER_AUDIT_PASS' : 'COVER_AUDIT_FAIL')
 process.exit(pass ? 0 : 1)

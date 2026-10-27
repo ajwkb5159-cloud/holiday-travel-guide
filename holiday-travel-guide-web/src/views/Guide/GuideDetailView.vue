@@ -21,6 +21,13 @@
             {{ isFav ? '❤️ 已收藏' : '🤍 收藏' }}
           </el-button>
         </div>
+        <a
+          v-if="coverCredit"
+          class="hero-credit"
+          :href="coverCredit.sourcePage"
+          target="_blank"
+          rel="noopener noreferrer"
+        >图：{{ coverCredit.artist }} / {{ coverCredit.license }}</a>
       </div>
 
       <div class="detail-body">
@@ -50,6 +57,7 @@ import SectionTitle from '@/components/SectionTitle.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue'
 import { getGuideDetail } from '@/api/guide'
+import { getImageCredit } from '@/api/imageCredits'
 import { SEASON_LABELS } from '@/utils/season'
 import { sanitizeGuideContent } from '@/utils/dom'
 import { recordGuideView } from '@/utils/behavior'
@@ -61,6 +69,7 @@ export default {
     return {
       SEASON_LABELS,
       guide: null,
+      coverCredit: null,
       loading: true
     }
   },
@@ -90,14 +99,25 @@ export default {
     async load() {
       this.loading = true
       this.guide = null
+      this.coverCredit = null
       try {
         this.guide = await getGuideDetail(this.$route.params.id)
         // 行为埋点：供首页「猜你喜欢」个性化推荐（纯 localStorage，静默失败）
-        if (this.guide) recordGuideView(this.guide)
+        if (this.guide) {
+          recordGuideView(this.guide)
+          this.loadCoverCredit()
+        }
       } catch (e) {
         this.guide = null
       } finally {
         this.loading = false
+      }
+    },
+    async loadCoverCredit() {
+      try {
+        this.coverCredit = await getImageCredit(this.guide && this.guide.CoverImage)
+      } catch (e) {
+        this.coverCredit = null
       }
     },
     toggleFav() {
@@ -138,6 +158,28 @@ export default {
   z-index: 1;
   padding: 26px 30px;
   color: #fff;
+}
+
+.hero-credit {
+  position: absolute;
+  right: 14px;
+  bottom: 12px;
+  z-index: 2;
+  max-width: 68%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 11px;
+  text-decoration: none;
+
+  &:hover {
+    color: #fff;
+    text-decoration: underline;
+  }
 }
 
 .detail-title {
