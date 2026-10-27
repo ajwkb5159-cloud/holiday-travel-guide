@@ -10,11 +10,13 @@ namespace HolidayGuideBackend.BLL;
 /// AI 问答每日额度（SQLite AiQuota 表，主键 (Day, Scope)）。
 /// Scope = "ip:x.x.x.x" 或 "global"。读写均为单行 upsert/查询，WAL 下开销可忽略。
 /// 过期行（保留 7 天）惰性清理：每天首个请求顺带执行一次 DELETE，避免常驻进程表膨胀。
+/// Ai:QuotaEnabled=false（默认）时完全不计数、不限次，仅保留接口兼容。
 /// </summary>
 public class AiQuotaService : IAiQuotaService
 {
     private readonly ISqlSugarClient _db;
     private readonly ILogger<AiQuotaService> _logger;
+    private readonly bool _quotaEnabled;
     private readonly int _ipLimit;
     private readonly int _globalCap;
     private long _lastCleanupDay;
@@ -23,6 +25,7 @@ public class AiQuotaService : IAiQuotaService
     {
         _db = db;
         _logger = logger;
+        _quotaEnabled = options.Value.QuotaEnabled;
         _ipLimit = Math.Max(1, options.Value.DailyIpQuota);
         _globalCap = Math.Max(_ipLimit, options.Value.GlobalDailyCap);
     }
@@ -49,6 +52,7 @@ public class AiQuotaService : IAiQuotaService
 
     public async Task<AiQuotaDto> GetQuotaAsync(string ip)
     {
+        if (!_quotaEnabled) return new AiQuotaDto(-1, -1, true);
         await CleanupIfNeededAsync();
         var (ipCount, globalCount) = await GetCountsAsync(ip);
         var remaining = Math.Max(0, Math.Min(_ipLimit - ipCount, _globalCap - globalCount));
@@ -56,10 +60,14 @@ public class AiQuotaService : IAiQuotaService
     }
 
     public async Task<bool> HasQuotaAsync(string ip)
-        => (await GetQuotaAsync(ip)).Remaining > 0;
+    {
+        if (!_quotaEnabled) return true;
+        return (await GetQuotaAsync(ip)).Remaining > 0;
+    }
 
     public async Task ConsumeAsync(string ip)
     {
+        if (!_quotaEnabled) return;
         var day = Today();
         try
         {
