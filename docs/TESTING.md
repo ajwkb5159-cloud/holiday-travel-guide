@@ -35,7 +35,7 @@ Start-Process "$run\HolidayGuideBackend.exe" -WorkingDirectory $run -PassThru
 |------|------|------|
 | `scripts/e2e-verify-v2.mjs` | 37 项 | 逐页访问、排序、搜索高亮/历史、收藏、XSS、断图兜底、移动端 |
 | `scripts/verify-upgrade.mjs` | 13 项 | 页脚新鲜度、更新中 503、遮罩、恢复自动刷新、移动端 |
-| `scripts/verify-ai.mjs` | 34 项 | 推荐、AI 流式、引用卡、额度、限流、上游故障不计费、关闭模式 |
+| `scripts/verify-ai.mjs` | 真实 31 项 + mock 6 项 | 推荐、AI 流式、引用卡、多轮 reasoning 历史、额度、限流、上游故障不计费、关闭模式、mock 空 choices/非 SSE 回退 |
 | `scripts/audit-images.mjs` | 只读审计 | 逐页 console/network、CSS 背景图真实加载、断图兜底、移动端、截图 |
 | `scripts/audit-covers.mjs` | 封面审计 | 120 篇是否 120 个唯一封面、每城是否 10 张、所有图片是否可加载 |
 
@@ -44,7 +44,16 @@ Start-Process "$run\HolidayGuideBackend.exe" -WorkingDirectory $run -PassThru
 ```bash
 node scripts/e2e-verify-v2.mjs --base http://127.0.0.1:5201
 node scripts/verify-upgrade.mjs --base http://127.0.0.1:5201 --token test-token-only --month 202601
-node scripts/verify-ai.mjs --bin <stage>/backend --source-db <snapshot.db> --port-start 5219
+# 解析器离线 mock（无需 key / 联网）
+node scripts/verify-ai.mjs --mock-only --source-db <snapshot.db> --port-start 5219
+
+# 真实 provider（默认 OpenCode Go；也可用 --base-url/--model/--key-file 指向任意 OpenAI 兼容端点）
+# --key-file 若指向 pi auth.json，会自动取 opencode-go 的 key（仅测试进程内存使用，不落盘）
+node scripts/verify-ai.mjs --bin <stage>/backend --source-db <snapshot.db> --port-start 5219 \
+  --key-file F:\HolidayGuide\secrets\opencode.key
+
+# 若模型要求 assistant 历史带 reasoning_content
+node scripts/verify-ai.mjs ... --send-reasoning
 node scripts/audit-images.mjs --base http://127.0.0.1:5201 --block-images
 node scripts/audit-covers.mjs --base http://127.0.0.1:5201
 ```

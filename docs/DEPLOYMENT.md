@@ -57,7 +57,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy-prod-elevated
 4. `robocopy /MIR` 后端、`wwwroot`、Updater；
 5. **排除** `appsettings.json`、`appsettings.Development.json`、`Data`、`data`、`logs`、`state.json`；
 6. 把生产配置备份到 `<backup-root>`；
-7. 校验生产 `Ai.ApiKey` 长度（`-RequireAiKey` 时空值视为失败）；
+7. 校验生产 AI key 已配置（`-RequireAiKey` 时 `ApiKey` 为空且 `ApiKeyFile` 不存在视为失败）；
 8. 启动服务并查询 `/api/system/status`，日志写入 `<publish-root>/deploy-prod.log`。
 
 常用开关：
@@ -65,6 +65,28 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\deploy-prod-elevated
 - `-SkipBackend`：只更新 Updater，后端不重启（静态文件可另行热复制）。
 - `-SkipUpdater`：只更新后端。
 - `-BackendService` / `-UpdaterService` / `-StatusUrl`：自定义服务名与探测地址。
+
+## AI provider / Key 切换
+
+生产 key 文件放在 publish 之外，避免 `robocopy /MIR` 删除：
+
+```powershell
+# 管理员 PowerShell；从 C:\Users\001\.pi\agent\auth.json 的 opencode-go 复制到
+# F:\HolidayGuide\secrets\opencode.key，并设置 ACL（SYSTEM 只读、Administrators 完全）
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-opencode-secret.ps1
+
+# 备份生产 appsettings → 清空 Ai.ApiKey → 写 ApiKeyFile/BaseURL/Model →
+# 重启 HolidayGuideBackend → 检查 /health 与 /api/ai/status
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\configure-prod-ai.ps1 `
+  -MaxTokens 3000 -TimeoutSeconds 120
+# 若探测确认上游要求 assistant 历史带 reasoning_content：
+#   -SendReasoningContent
+```
+
+- `BaseURL` 必须写完整的 `.../chat/completions`，代码不会拼接。
+- 不要依赖服务账户的 `~`（SYSTEM 指向 systemprofile）；`ApiKeyFile` 用绝对路径。
+- 配置不热重载，脚本已负责重启；手工改完也必须 `sc stop/start HolidayGuideBackend`。
+- 上线前先跑 `node scripts/probe-ai-provider.mjs`，确认 key/端点/多轮 reasoning 行为。
 
 ## Update Token 轮换
 

@@ -94,13 +94,26 @@ AI 助手默认关闭。需要时设置：
 ```json
 "Ai": {
   "Enabled": true,
-  "BaseURL": "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
-  "Model": "qwen-flash",
-  "ApiKey": ""
+  "BaseURL": "https://opencode.ai/zen/go/v1/chat/completions",
+  "Model": "deepseek-v4.1-flash",
+  "ApiKey": "",
+  "ApiKeyFile": "F:\\HolidayGuide\\secrets\\opencode.key",
+  "MaxTokens": 3000,
+  "TimeoutSeconds": 120,
+  "SendReasoningContent": false,
+  "QuotaEnabled": false,
+  "HistoryMaxTurns": 500,
+  "HistoryMaxChars": 1500000,
+  "HistoryPerMessageChars": 50000
 }
 ```
 
-推荐用环境变量 `DASHSCOPE_API_KEY` 或 .NET User Secrets 注入密钥；任何兼容 OpenAI 流式协议的服务都可以通过 `BaseURL` / `Model` 替换。
+- `BaseURL` 必须是完整的 `.../chat/completions` 端点，代码不会自动追加 `/v1`。
+- 生产推荐 `ApiKeyFile` 绝对路径（SYSTEM 服务的 `~` 指向 systemprofile）；文件放在 publish 之外并限制 ACL。
+- Key 解析链：`ApiKey` → `ApiKeyFile` → `OPENCODE_API_KEY_FILE` / `OPENCODE_GO_API_KEY` / `OPENCODE_API_KEY`；不再保留 DashScope 回退。
+- `QuotaEnabled=false`（默认）= 不限每日次数，前端不显示额度角标；`HistoryMaxTurns/Chars` 控制多轮历史，默认允许约 1M tokens 上下文。
+- DeepSeek 系模型若要求多轮历史带 `reasoning_content`，把 `SendReasoningContent` 设为 `true`；先用 `node scripts/probe-ai-provider.mjs` 探测。
+- 任何兼容 OpenAI 流式协议的服务都可以通过 `BaseURL` / `Model` 替换。
 
 ### 运行
 
@@ -156,7 +169,8 @@ dotnet run --project HolidayGuideUpdater -- --run-once --month 202601
 ## AI 助手与推荐
 
 - `POST /api/ai/chat`：SSE 事件 `delta` / `sources` / `done` / `error`。检索复用 `ISearchService.RetrieveForRagAsync`，答案中的 `[n]` 映射回攻略引用。
-- 额度：SQLite `AiQuota(Day,Scope,Count)`，每 IP 日限 `Ai:DailyIpQuota` + 全局日上限 `Ai:GlobalDailyCap`。
+- 额度：默认 `Ai:QuotaEnabled=false`，不限每日次数、前端无额度角标；需要时可开启并设置 `DailyIpQuota`/`GlobalDailyCap`（SQLite `AiQuota` 计数）。
+- 上下文：默认 `HistoryMaxTurns=500` / `HistoryMaxChars=1,500,000` / 单条 `50,000`，前端最多带 500 条历史，后端按总字符预算裁剪，支持模型 1M token 上下文。
 - 反向代理（如 cpolar/Nginx）后必须解析 `X-Forwarded-For` 首段，否则所有访客会被当成同一个 IP。
 - `GET /api/guide/recommend?destinations=&categories=&tags=&excludeIds=&limit=`：纯读打分接口；行为信号存 localStorage，无后端写接口。
 - `Ai:Enabled=false` 时 chat 返回 501，前端悬浮球不渲染。
@@ -166,24 +180,44 @@ dotnet run --project HolidayGuideUpdater -- --run-once --month 202601
 `scripts/gen-real.mjs` 为 120 篇攻略生成器（12 目的地 × 10 节日），支持：
 
 ```bash
-node scripts/gen-real.mjs --month 202610 --provider zhipu --fallback-provider siliconflow
-node scripts/gen-real.mjs --month 202610 --smoke beijing-zhongqiu --provider dashscope --no-fallback
+node scripts/gen-real.mjs --month 202610 --provider opencode --fallback-provider zhipu
+node scripts/gen-real.mjs --month 202610 --smoke beijing-zhongqiu --provider opencode --no-fallback
 node scripts/gen-real.mjs --month 202610 --validate-only
-node scripts/gen-real.mjs --probe-keys --key-dir /path/to/keys
+node scripts/gen-real.mjs --probe-keys --require-primary --key-dir /path/to/keys
+node scripts/gen-real.mjs --month 202610 --fresh --allow-reuse 0   # 全量重生成，禁止旧内容兜底
 ```
 
-- 免费优先：智谱 GLM-4-Flash → 硅基流动免费层；DashScope（付费/额度制）仅在显式 `--provider dashscope` 时使用。
-- Key 解析链：`--api-key` → `--key-file` → `--key-dir` / `HOLIDAY_GUIDE_KEY_DIR` → 用户目录 `.zhipu.key` / `.siliconflow.key` / `.dashscope.key` → 环境变量 → 本机 MCP 配置。
+- **节日日期动态计算**：`scripts/lib/holidays.mjs` 用 `lunar-javascript` 按目标月份滚动 12 个月窗口，农历/节气/固定日期都算，闰月不参与；`scripts/test-holidays.mjs` 锁定 202610 与跨年/闰月边界。
+- **公开事实层**：`scripts/refresh-facts.mjs` 以中文 Wikivoyage（旅行向内容）为主源，抓取城市/景点摘要，并读取官方节假日安排（`timor.tech`，可失败），写入 `data/{yyyyMM}/facts.json`；生成器把事实块注入 prompt，票价/营业时间等易变信息要求写区间并注明「以景区公告为准」。中文 Wikipedia 在部分国内网络不可达，不作为必需源。
+- 主通道：OpenCode Go `deepseek-v4.1-flash`（`F:\HolidayGuide\secrets\opencode.key`，支持 `response_format:json_object`）→ 备 智谱 GLM-4-Flash / 硅基流动免费层。**DashScope/qwen-flash 已移除**。
+- Key 解析链：`--api-key` → `--key-file` → provider key 文件（OpenCode 用绝对路径）→ `--key-dir` / `HOLIDAY_GUIDE_KEY_DIR` 下的 `.zhipu.key` / `.siliconflow.key` → `OPENCODE_*` 环境变量 → 本机 MCP 配置。
 - Windows 计划任务以 SYSTEM 运行时，`homedir()` 指向 systemprofile；**必须**用 `--key-dir` 或 `HOLIDAY_GUIDE_KEY_DIR` 指向真实用户目录（`run-monthly-data.bat` 已通过本地配置处理）。
-- 单篇正文分 2 段生成，规避小模型输出上限截断；失败篇目默认复用上月同 `externalId` 内容，保证产出稳定。
+- 单篇正文分 2 段生成，规避小模型输出上限截断；失败篇目仅在节日日期/天数/季节仍匹配时才复用上月内容，避免旧内容复活。
+- 封面 URL 带 `?v=yyyyMM`，月度换图后浏览器不会继续吃旧缓存。
 
 自动化脚本：
 
 ```bat
-:: 复制配置模板并填写 KEYDIR / PUBDIR / provider
+:: 安装脚本侧依赖（农历）
+npm ci --prefix scripts
+
+:: 复制配置模板并填写 KEYDIR / PUBDIR / provider / PUBLISH_WWWROOT
 copy scripts\monthly-data.local.bat.example scripts\monthly-data.local.bat
-scripts\run-monthly-data.bat --force
+
+:: 先做无 LLM 的环境/key/路径预检
+scripts\run-monthly-data.bat --probe
+
+:: 手动跑一次（--fresh 会先把旧 partial 移到 partial.bak-*）
+scripts\run-monthly-data.bat --fresh --force
+
+:: 注册计划任务（需管理员），再用提权脚本核验
 scripts\install-monthly-task.bat
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\verify-schedule.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\probe-monthly-task-elevated.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\check-monthly-task-run.ps1
+
+:: 同月安全重发（停服备份 → --run-once → 校验 120/10）
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\publish-month-elevated.ps1 -Month 202610
 ```
 
 ## 更新窗口与数据新鲜度
@@ -226,8 +260,10 @@ node scripts/e2e-verify-v2.mjs --base http://127.0.0.1:5201
 # 13 项数据新鲜度 / 503 遮罩 / 自动刷新
 node scripts/verify-upgrade.mjs --base http://127.0.0.1:5201 --token <test-token> --month 202601
 
-# 34 项 AI 助手 + 推荐全链路（真实 LLM，自建栈）
-node scripts/verify-ai.mjs --bin <stage>/backend --source-db <snapshot.db> --port-start 5219
+# 真实 provider 31 项 + 离线 mock 6 项（自建栈；--mock-only 先跑离线解析器）
+node scripts/verify-ai.mjs --mock-only --source-db <snapshot.db> --port-start 5219
+node scripts/verify-ai.mjs --bin <stage>/backend --source-db <snapshot.db> --port-start 5219 \
+  --key-file F:\HolidayGuide\secrets\opencode.key
 
 # 只读浏览器审计：逐页 + 图片真实加载 + 移动端 + 截图
 node scripts/audit-images.mjs --base http://127.0.0.1:5201
@@ -240,13 +276,17 @@ node scripts/audit-covers.mjs --base http://127.0.0.1:5201
 
 ## 图片
 
-城市封面按 `{slug}-01.jpg` … `{slug}-10.jpg` 命名（每个城市 10 张不同景点图），生成器按节日序号分配，保证同一城市 10 篇攻略的封面互不相同；节日封面为 `/images/holidays/{slug}.jpg`。图片位于 `holiday-travel-guide-web/public/images/`，构建时复制到 `wwwroot/images/`。来源与许可见 [`CREDITS.md`](holiday-travel-guide-web/public/images/CREDITS.md)（Unsplash / Pexels License，无需署名但在此致谢）。
+城市封面按 `{slug}-01.jpg` … `{slug}-10.jpg` 命名（每个城市 10 张不同景点图），生成器按节日序号分配，保证同一城市 10 篇攻略的封面互不相同；节日封面为 `/images/holidays/{slug}.jpg`。图片位于 `holiday-travel-guide-web/public/images/`，构建时复制到 `wwwroot/images/`。
+
+- **月度刷新**：`scripts/refresh-images.mjs` 从 Wikimedia Commons 按 `scripts/data/image-manifest.json` 搜索，只接受 JPEG + CC0/PD/CC BY/CC BY-SA，按月份轮换，下载到本地并同步 `wwwroot`；失败保留旧图，不阻断数据生成。
+- **署名**：生成 `public/images/credits.json` 与 `CREDITS.md`；攻略详情页封面右下角显示「图：作者 / 许可」并链到 Commons 文件页，页脚有「图片来源与许可」汇总页 `/image-credits`。
+- `scripts/audit-image-credits.mjs` 校验每张图都有署名、许可白名单、来源页与本地 JPEG。
 
 ## 安全
 
 - 仓库不包含任何真实密钥；`appsettings.json` 中 token 为占位符。
 - 生产 `Update:Token` 必须定期轮换，且只保存在部署目录的 `appsettings.json`（不进 git）。
-- AI API Key 用环境变量 / User Secrets / 部署目录本地配置注入。
+- AI API Key 用环境变量 / User Secrets / `Ai:ApiKeyFile` 绝对路径注入；生产 key 文件放在 publish 之外（如 `F:\HolidayGuide\secrets\opencode.key`），仅授予 SYSTEM 读取权限，不随 robocopy 镜像。
 - `/api/update/*` 仅靠 `X-Update-Token` 保护；请使用足够长的随机 token，并通过 TLS 暴露站点。
 - 反向代理场景下，`X-Forwarded-For` 只信任可信代理链；不要直接把客户端头当作身份。
 - 依赖升级前请检查已知漏洞；Node/.NET 依赖均带 lockfile。

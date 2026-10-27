@@ -4,7 +4,8 @@
 
 - 仓库中的 `Update:Token` / `Backend:UpdateToken` 是占位符 `dev-only-token-change-me`，**不是生产 token**。
 - 生产 token 只存在于部署目录的 `appsettings.json`，该文件被部署脚本排除，永不随镜像覆盖。
-- AI API Key 推荐通过环境变量 `DASHSCOPE_API_KEY`、.NET User Secrets 或部署目录本地配置注入；不要提交到仓库。
+- AI API Key 推荐通过 `Ai:ApiKeyFile`（绝对路径，文件在 publish 之外）、环境变量 `OPENCODE_API_KEY` / `OPENCODE_GO_API_KEY`、或 .NET User Secrets 注入；不要提交到仓库。不再保留 DashScope 回退。
+- 生产 key 文件示例：`F:\HolidayGuide\secrets\opencode.key`，ACL 仅 SYSTEM 读取、Administrators 完全、当前用户只读；`robocopy /MIR` 不会碰它。
 - 仓库忽略 `*.key`、`.env*`、`appsettings.json.bak*`、`monthly-data.local.bat` 等本机配置。
 - 部署脚本在停服窗口备份 SQLite 三件套与两份 appsettings 到 `<backup-root>`（publish 之外），避免下一次镜像误删。
 
@@ -56,5 +57,5 @@ scripts\rotate-update-token.ps1 -PublishRoot <publish-root> -BackupRoot <backup-
 - [ ] 没有 `*.key`、`.env`、生产 `appsettings.json`、日志、DB、`state.json`
 - [ ] `git grep` 检查旧 token、`sk-`、`ghp_`、生产域名/绝对路径零命中
 - [ ] 生产 token 已轮换（或确认从未公开）
-- [ ] `Ai.ApiKey` 不在仓库；生产部署后长度 > 0
+- [ ] AI key 不在仓库；生产 `Ai.ApiKey` 为空时 `ApiKeyFile` 指向的文件存在且 ACL 正确
 - [ ] 示例数据不含隐私信息
