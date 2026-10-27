@@ -1,10 +1,10 @@
 // LLM 保姆级攻略生成器（月度数据生产器）
 // 120 篇 = 12 目的地 × 10 节日；每篇 8 大板块 HTML 长文；partial 断点续跑
-// 免费通道优先：智谱 GLM-4-Flash（官方免费模型）→ 硅基流动免费层 → 兜底复用上月内容
+// 主通道：OpenCode Go deepseek-v4.1-flash；备用：智谱 GLM-4-Flash / 硅基流动免费层
 //
 // 用法：
 //   node scripts/gen-real.mjs [--month yyyyMM] [--baseline yyyyMM|auto|none]
-//                             [--provider zhipu] [--fallback-provider siliconflow]
+//                             [--provider opencode] [--fallback-provider zhipu]
 //                             [--model M] [--concurrency 2] [--segments 2|3]
 //                             [--only <externalId>] [--validate-only] [--assemble-only]
 //                             [--dry-run] [--key-file F] [--key-dir DIR] [--api-key K] [--no-fallback]
@@ -18,9 +18,11 @@
 //   --segments        每篇正文分几段生成（默认 2；免费模型输出上限小，分段可根治截断）
 //   --assemble-only   不调 LLM，仅用 partial + baseline 组装（中断后补齐用）
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, renameSync, appendFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
+import { buildHolidayWindow } from './lib/holidays.mjs'
+import { loadFactsForMonth, factsPromptBlock } from './lib/facts.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DATA_ROOT = join(ROOT, 'HolidayGuideUpdater', 'data')
@@ -44,21 +46,10 @@ const DESTINATIONS = [
   { slug: 'guilin', name: '桂林', region: '广西', category: '自然', imgKw: 'guilin,landscape', themes: ['漓江山水', '阳朔徒步', '骑行摄影', '乡村慢生活'] }
 ]
 
-// 沿用 gen-mock 的 10 条节日（日期不动，保证倒计时非空）；补 slug/season/days 映射
-const HOLIDAYS = [
-  { slug: 'qixi', name: '七夕', date: '2026-08-19', type: 'traditional', isLegal: 0, description: '中国情人节，浪漫出行', season: 'summer', days: 3 },
-  { slug: 'zhongqiu', name: '中秋节', date: '2026-09-25', type: 'traditional', isLegal: 1, description: '赏月吃月饼，阖家团圆', season: 'autumn', days: 3 },
-  { slug: 'guoqing', name: '国庆节', date: '2026-10-01', type: 'legal', isLegal: 1, description: '七天长假，出行高峰，提前规划', season: 'autumn', days: 5 },
-  { slug: 'chongyang', name: '重阳节', date: '2026-10-18', type: 'traditional', isLegal: 0, description: '登高望远，敬老孝亲', season: 'autumn', days: 3 },
-  { slug: 'shengdan', name: '圣诞节', date: '2026-12-25', type: 'custom', isLegal: 0, description: '冬日浪漫氛围', season: 'winter', days: 3 },
-  { slug: 'yuandan', name: '元旦', date: '2027-01-01', type: 'legal', isLegal: 1, description: '新年第一天，短途出游好时机', season: 'winter', days: 3 },
-  { slug: 'chunjie', name: '春节', date: '2027-02-06', type: 'traditional', isLegal: 1, description: '回家过年或反向旅行避寒', season: 'winter', days: 5 },
-  { slug: 'qingming', name: '清明节', date: '2027-04-05', type: 'traditional', isLegal: 1, description: '踏青扫墓，春游正当时', season: 'spring', days: 3 },
-  { slug: 'laodong', name: '劳动节', date: '2027-05-01', type: 'legal', isLegal: 1, description: '五天小长假，中长途旅行', season: 'spring', days: 5 },
-  { slug: 'duanwu', name: '端午节', date: '2027-06-09', type: 'traditional', isLegal: 1, description: '赛龙舟吃粽子', season: 'summer', days: 4 }
-]
+// 节日由 lib/holidays.mjs 按目标月份动态计算（窗口 = 目标月前 3 个月起 12 个月），
+// 不再硬编码年份；10 个 slug 的顺序仍决定封面索引，保持与历史数据一致。
 
-// 免费优先：zhipu（官方免费模型）→ siliconflow（免费层小模型）→ dashscope（阿里云，仅在 --provider 显式指定时用）
+// 主通道 opencode（OpenCode Go deepseek-v4.1-flash）→ 备 zhipu / siliconflow（免费层）；DashScope 已移除
 const PROVIDERS = {
   zhipu: {
     name: '智谱 GLM-4-Flash（官方免费模型）',
@@ -78,29 +69,44 @@ const PROVIDERS = {
     maxTokens: 4096,
     jsonMode: true
   },
-  dashscope: {
-    name: '阿里云 DashScope（qwen-flash，付费/额度制，仅在显式指定时使用）',
-    baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-    model: 'qwen-flash',
-    envKeys: ['DASHSCOPE_API_KEY', 'ALIYUN_API_KEY', 'QWEN_API_KEY'],
-    keyFile: join(KEY_HOME, '.dashscope.key'),
+  opencode: {
+    name: 'OpenCode Go（deepseek-v4.1-flash，主通道）',
+    baseURL: 'https://opencode.ai/zen/go/v1/chat/completions',
+    model: 'deepseek-v4.1-flash',
+    envKeys: ['OPENCODE_GO_API_KEY', 'OPENCODE_API_KEY', 'ANTHROPIC_API_KEY'],
+    keyFile: process.env.OPENCODE_KEY_FILE || 'F:\\HolidayGuide\\secrets\\opencode.key',
+    absoluteKeyFile: true,
     maxTokens: 8192,
-    jsonMode: true
+    jsonMode: true,
+    extraHeaders: {
+      'User-Agent': 'HolidayGuideDataBot/1.0',
+      'x-opencode-session': `hg-data-${Date.now()}`
+    }
   }
 }
 
 // 图片策略：本地自托管（wwwroot/images），彻底摆脱外链图床故障。
-// 每个城市准备 10 张不同景点图，按节日序号（01-10）分配，保证同城不同攻略封面不重复。
-const HOLIDAY_SLUG_BY_NAME = new Map(HOLIDAYS.map(h => [h.name, h.slug]))
-const HOLIDAY_INDEX_BY_SLUG = new Map(HOLIDAYS.map((h, i) => [h.slug, i]))
-const coverUrl = (dest, holiday) => {
-  const slug = holiday?.slug || HOLIDAY_SLUG_BY_NAME.get(holiday?.name)
-  const idx = HOLIDAY_INDEX_BY_SLUG.get(slug) ?? 0
-  return `/images/destinations/${dest.slug}-${String(idx + 1).padStart(2, '0')}.jpg`
+// 每个城市 10 张不同景点图，按节日序号（01-10）分配；?v=yyyyMM 用于绕过浏览器旧缓存。
+function holidayMaps(holidays) {
+  return {
+    slugByName: new Map(holidays.map(h => [h.name, h.slug])),
+    indexBySlug: new Map(holidays.map((h, i) => [h.slug, i]))
+  }
 }
-const holidayCoverUrl = (holiday) => {
-  const slug = holiday.slug || HOLIDAY_SLUG_BY_NAME.get(holiday.name) || 'zhongqiu'
-  return `/images/holidays/${slug}.jpg`
+
+const coverUrl = (dest, holiday, holidays, month) => {
+  const { slugByName, indexBySlug } = holidayMaps(holidays)
+  const slug = holiday?.slug || slugByName.get(holiday?.name)
+  const idx = indexBySlug.get(slug) ?? 0
+  const version = month ? `?v=${month}` : ''
+  return `/images/destinations/${dest.slug}-${String(idx + 1).padStart(2, '0')}.jpg${version}`
+}
+
+const holidayCoverUrl = (holiday, holidays, month) => {
+  const { slugByName } = holidayMaps(holidays)
+  const slug = holiday.slug || slugByName.get(holiday.name) || 'zhongqiu'
+  const version = month ? `?v=${month}` : ''
+  return `/images/holidays/${slug}.jpg${version}`
 }
 
 // ---------- API key 探测 ----------
@@ -192,7 +198,11 @@ async function callOnce(provider, apiKey, system, user, maxTokens = null) {
   const t0 = Date.now()
   const resp = await fetch(provider.baseURL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+      ...(provider.extraHeaders || {})
+    },
     body: JSON.stringify(body)
   })
   const ms = Date.now() - t0
@@ -246,7 +256,12 @@ const SYSTEM_PROMPT = `你是资深旅行规划师，为旅游网站撰写「保
 2. HTML 只用这些标签：h2/h3/p/ul/ol/li/table/thead/tbody/tr/th/td/blockquote/strong。禁止内嵌 <script>、禁止输出代码围栏
 3. 信息必须具体真实：真实地名、景点名、菜名、价格区间（人民币）；不得编造节日日期
 4. 价格给区间（如「人均 300-500 元」），不确定的信息不要编造
-5. 行程节奏合理不过度赶场`
+5. 行程节奏合理不过度赶场
+6. 节日名称、日期、法定天数以【已核实资料】为准；资料未覆盖时使用通用常识，并注明「通用建议」
+7. 票价、开放时间、班次等易变信息：资料未明确给出的，不得写具体数字；写成区间并注明「以景区公告为准」
+8. 不出现早于目标年份的过时表述；不编造不存在的景点、线路、班次或店铺
+9. 不要自称「已核实」「已验证」「官方确认」「官方指定」；只有【已核实资料】中的内容可以直接引用，其余信息一律按通用建议表述
+10. 酒店/餐厅只写区域、档位与价格区间，不要编造具体品牌、店名或房价；不确定就不写`
 
 /** 分段描述：每段负责的板块与字数预算 */
 const SEGMENT_PLAN = {
@@ -261,13 +276,14 @@ const SEGMENT_PLAN = {
   ]
 }
 
-function buildUserPrompt(entry, avoidTitles, batchInfo) {
+function buildUserPrompt(entry, avoidTitles, batchInfo, factsBlock = '') {
   const avoid = avoidTitles.length ? `\n避免与这些已有标题/开头雷同：${avoidTitles.join('、')}` : ''
   return `目的地：${entry.dest.name}（${entry.dest.region}）
 节日：${entry.hol.name}（${entry.hol.date}）
 季节：${entry.hol.season}    天数：${entry.hol.days} 天
 主题侧重：${entry.theme}
 ${batchInfo}
+${factsBlock}
 请输出 JSON。${avoid}`
 }
 
@@ -275,12 +291,13 @@ const batchLine = (month) => month
   ? `本次为 ${month.slice(0, 4)} 年 ${Number(month.slice(4, 6))} 月发布的月度批次：内容须体现 ${month.slice(0, 4)} 年当下的旅行信息（价格、交通、营业时间），不要出现更早年份的过时表述。`
   : ''
 
-function buildSegmentPrompt(entry, seg, prevPlain, avoidTitles, month) {
+function buildSegmentPrompt(entry, seg, prevPlain, avoidTitles, month, factsBlock = '') {
   const head = `目的地：${entry.dest.name}（${entry.dest.region}）
 节日：${entry.hol.name}（${entry.hol.date}）
 季节：${entry.hol.season}    天数：${entry.hol.days} 天
 主题侧重：${entry.theme}
-${batchLine(month)}`
+${batchLine(month)}
+${factsBlock}`
 
   if (seg.key === 'part1') {
     return `${head}
@@ -336,32 +353,42 @@ function trigramSimilarity(a, b) {
   return inter / Math.min(ga.size, gb.size)
 }
 
-function validateGuide(entry, g) {
+function validateGuide(entry, g, holidays, month, maxContent = 6000) {
   const errors = []
   const idRe = /^[a-z0-9-]{1,64}$/
   if (!idRe.test(g.externalId)) errors.push(`externalId 非法: ${g.externalId}`)
-  if (![3, 4, 5].includes(g.days)) errors.push(`days 非法: ${g.days}`)
+  if (![3, 4, 5, 6, 7, 8].includes(g.days)) errors.push(`days 非法: ${g.days}`)
+  if (g.days !== entry.hol.days) errors.push(`days 与节日窗口不一致: ${g.days} != ${entry.hol.days}`)
   const text = stripHtml(g.content)
   if (text.length < 1800) errors.push(`正文字数不足: ${text.length} < 1800`)
-  if (text.length > 5000) errors.push(`正文过长: ${text.length} > 5000`)
+  if (text.length > maxContent) errors.push(`正文过长: ${text.length} > ${maxContent}`)
   if (!((g.content.match(/<h2[^>]*>/gi) || []).length >= 6)) errors.push('h2 板块 < 6')
   if (!g.content.includes('<table')) errors.push('缺少 table（行程总览/预算参考）')
   if (!text.includes(`第${g.days}天`)) errors.push(`正文缺「第${g.days}天」`)
   if (text.includes(`第${g.days + 1}天`)) errors.push(`正文出现越界「第${g.days + 1}天」`)
+  if (/已核实|已验证|官方确认|官方指定/.test(text)) errors.push('出现未经证实的「已核实/已验证/官方确认」表述')
   const tags = Array.isArray(g.tags) ? g.tags : []
   if (tags.length !== 3 || tags.some(t => !t || t.includes(','))) errors.push(`tags 须恰好 3 个无逗号: ${JSON.stringify(tags)}`)
   if (!g.title || g.title.length > 25) errors.push(`title 非法: ${g.title}`)
   if (!g.summary) errors.push('summary 为空')
   if (g.season !== entry.hol.season) errors.push(`season 与节日映射不一致: ${g.season}`)
+  if (g.holidayName !== entry.hol.name) errors.push(`holidayName 不一致: ${g.holidayName} != ${entry.hol.name}`)
+  if (g.holidayDate !== entry.hol.date) errors.push(`holidayDate 不一致: ${g.holidayDate} != ${entry.hol.date}`)
+  const cover = String(g.coverImage || '')
+  if (!cover.startsWith('/images/destinations/')) errors.push(`封面不是本地景点图: ${cover}`)
+  if (/^https?:/i.test(cover)) errors.push(`封面是外链: ${cover}`)
+  if (/loremflickr|picsum/i.test(cover)) errors.push(`封面仍是旧随机图: ${cover}`)
+  if (month && !cover.includes(`?v=${month}`)) errors.push(`封面缺少 ?v=${month}: ${cover}`)
   return errors
 }
 
 // ---------- 主流程 ----------
 function parseArgs(argv) {
   const args = {
-    concurrency: 2, provider: 'zhipu', fallbackProvider: 'siliconflow', model: null, apiKey: null,
-    keyFile: null, keyDir: null, probeKeys: false, only: null, validateOnly: false, assembleOnly: false, dryRun: false,
-    month: null, baseline: 'auto', segments: 2, noFallback: false, smoke: null
+    concurrency: 2, provider: 'opencode', fallbackProvider: 'zhipu', model: null, apiKey: null,
+    keyFile: null, keyDir: null, probeKeys: false, requirePrimary: false, only: null, validateOnly: false, assembleOnly: false, dryRun: false,
+    month: null, baseline: 'auto', segments: 2, noFallback: false, smoke: null,
+    fresh: false, allowReuse: null, facts: 'auto', factsOffline: false, maxContent: 6000
   }
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
@@ -372,6 +399,7 @@ function parseArgs(argv) {
     else if (a === '--key-file') args.keyFile = argv[++i]
     else if (a === '--key-dir') args.keyDir = argv[++i]
     else if (a === '--probe-keys') args.probeKeys = true
+    else if (a === '--require-primary') args.requirePrimary = true
     else if (a === '--model') args.model = argv[++i]
     else if (a === '--only') args.only = argv[++i]
     else if (a === '--month') args.month = argv[++i]
@@ -382,12 +410,19 @@ function parseArgs(argv) {
     else if (a === '--dry-run') args.dryRun = true
     else if (a === '--no-fallback') args.noFallback = true
     else if (a === '--smoke') args.smoke = argv[++i]
+    else if (a === '--fresh') args.fresh = true
+    else if (a === '--allow-reuse') args.allowReuse = Number(argv[++i])
+    else if (a === '--facts') args.facts = argv[++i]
+    else if (a === '--facts-offline') args.factsOffline = true
+    else if (a === '--max-content') args.maxContent = Number(argv[++i])
   }
   if (!args.month) {
     const d = new Date()
     args.month = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}`
   }
   if (![2, 3].includes(args.segments)) args.segments = 2
+  if (!Number.isFinite(args.allowReuse) || args.allowReuse < 0) args.allowReuse = null
+  if (!Number.isFinite(args.maxContent) || args.maxContent < 1800) args.maxContent = 6000
   return args
 }
 
@@ -423,9 +458,9 @@ function loadBaseline(monthKey) {
   }
 }
 
-function buildEntries() {
+function buildEntries(holidays) {
   const entries = []
-  for (const hol of HOLIDAYS) {
+  for (const hol of holidays) {
     for (const dest of DESTINATIONS) {
       entries.push({
         externalId: `${dest.slug}-${hol.slug}`,
@@ -471,16 +506,22 @@ function loadTitlesByDest(partialDir) {
   return byDest
 }
 
-/** 取生成内容：partial 优先，缺失用 baseline，保证 120 篇齐全 */
+/** 取生成内容：partial 优先；baseline 仅在节日日期/天数/季节仍匹配时复用，避免旧内容复活。 */
 function resolveGuide(entry, partialDir, baselineMap) {
   const partial = readPartial(partialDir, entry.externalId)
   if (partial) return { guide: partial, source: 'partial' }
   const base = baselineMap?.get(entry.externalId)
-  if (base) return { guide: base, source: 'baseline' }
+  if (base &&
+      base.holidayName === entry.hol.name &&
+      base.holidayDate === entry.hol.date &&
+      Number(base.days) === Number(entry.hol.days) &&
+      base.season === entry.hol.season) {
+    return { guide: base, source: 'baseline' }
+  }
   return { guide: null, source: 'missing' }
 }
 
-function buildDoc(entries, partialDir, baseline, baselineMonth) {
+function buildDoc(entries, partialDir, baseline, baselineMonth, holidays, month) {
   const baselineMap = new Map((baseline?.guides ?? []).map(g => [g.externalId, g]))
   const guides = []
   let generated = 0, reused = 0
@@ -490,20 +531,17 @@ function buildDoc(entries, partialDir, baseline, baselineMonth) {
     if (!guide) { missing.push(entry.externalId); continue }
     if (source === 'baseline') reused++
     else generated++
-    // 兜底复用上月内容时，封面也必须切到本地图，避免旧数据把 loremflickr 带回来
-    guides.push({ ...guide, coverImage: coverUrl(entry.dest, entry.hol) })
+    // 兜底复用上月内容时，封面也必须切到本地图；?v= 让浏览器拿到当月新图
+    guides.push({ ...guide, coverImage: coverUrl(entry.dest, entry.hol, holidays, month) })
   }
-  const holidaySource = baseline?.holidays?.length
-    ? baseline.holidays
-    : HOLIDAYS.map(h => ({
-        name: h.name, date: h.date, type: h.type, isLegal: h.isLegal,
-        description: h.description, coverImage: holidayCoverUrl(h)
-      }))
-  const holidays = holidaySource.map(h => ({ ...h, coverImage: holidayCoverUrl(h) }))
-  return { guideCount: guides.length, generated, reused, missing, doc: { guides, holidays }, baselineMonth }
+  const holidaysOut = holidays.map(h => ({
+    name: h.name, date: h.date, type: h.type, isLegal: h.isLegal,
+    description: h.description, coverImage: holidayCoverUrl(h, holidays, month)
+  }))
+  return { guideCount: guides.length, generated, reused, missing, doc: { guides, holidays: holidaysOut }, baselineMonth }
 }
 
-function validateAll(entries, partialDir, baseline) {
+function validateAll(entries, partialDir, baseline, holidays, month, maxContent) {
   const baselineMap = new Map((baseline?.guides ?? []).map(g => [g.externalId, g]))
   const errors = []
   const guides = []
@@ -513,8 +551,12 @@ function validateAll(entries, partialDir, baseline) {
     if (!guide) { errors.push(`${entry.externalId}: 缺内容（无 partial 且无兜底）`); continue }
     if (seenIds.has(entry.externalId)) { errors.push(`${entry.externalId}: externalId 重复`); continue }
     seenIds.add(entry.externalId)
-    for (const err of validateGuide(entry, guide)) errors.push(`${entry.externalId}${source === 'baseline' ? '(兜底)' : ''}: ${err}`)
-    guides.push(guide)
+    // 兜底内容会在 buildDoc 里换成当月封面，校验时用同一份候选，避免把旧封面当成错误
+    const candidate = source === 'baseline'
+      ? { ...guide, coverImage: coverUrl(entry.dest, entry.hol, holidays, month) }
+      : guide
+    for (const err of validateGuide(entry, candidate, holidays, month, maxContent)) errors.push(`${entry.externalId}${source === 'baseline' ? '(兜底)' : ''}: ${err}`)
+    guides.push(candidate)
   }
   // 相似度抽查 20 对（仅抽查本次生成内容，避免兜底旧内容误报）
   let checked = 0
@@ -536,15 +578,16 @@ function validateAll(entries, partialDir, baseline) {
 
 /** 生成一篇攻略（多段拼接），返回 guide 对象 */
 async function generateOne(entry, ctx) {
-  const { channels, avoidTitles, month, segments } = ctx
+  const { channels, avoidTitles, month, segments, facts, holidays } = ctx
   const plan = SEGMENT_PLAN[segments]
+  const factsBlock = facts ? factsPromptBlock(facts, entry.dest.slug) : ''
   let title = '', summary = '', tags = null
   const htmlParts = []
   const prevPlain = () => stripHtml(htmlParts.join('\n')).replace(/\s+/g, ' ').slice(-900)
 
   for (const seg of plan) {
     let r = null, lastErr = null
-    let user = buildSegmentPrompt(entry, seg, prevPlain(), avoidTitles, month)
+    let user = buildSegmentPrompt(entry, seg, prevPlain(), avoidTitles, month, factsBlock)
 
     // 每段最多 2 轮「通道链尝试」：解析失败/字段缺失都把错误反馈给模型重试
     for (let round = 1; round <= 2 && !r; round++) {
@@ -592,12 +635,15 @@ async function generateOne(entry, ctx) {
     htmlParts.push(r.part)
   }
 
+  // 模型偶尔会给自己补充的信息盖「已核实」章；输出前统一降级为「参考」，避免误导
+  const safeContent = htmlParts.join('\n').replace(/已核实|已验证|官方确认|官方指定/g, '参考')
+
   return {
     externalId: entry.externalId,
     title,
     summary,
-    content: htmlParts.join('\n'),
-    coverImage: coverUrl(entry.dest, entry.hol),
+    content: safeContent,
+    coverImage: coverUrl(entry.dest, entry.hol, holidays, month),
     destination: entry.dest.name,
     region: entry.dest.region,
     season: entry.season,
@@ -609,38 +655,86 @@ async function generateOne(entry, ctx) {
   }
 }
 
+function resolveFacts(args) {
+  if (args.facts === 'none') return null
+  if (args.facts && args.facts !== 'auto') {
+    const p = isAbsolute(args.facts) ? args.facts : join(ROOT, args.facts)
+    if (!existsSync(p)) throw new Error(`facts 文件不存在: ${p}`)
+    return JSON.parse(readFileSync(p, 'utf-8'))
+  }
+  return loadFactsForMonth(DATA_ROOT, args.month)
+}
+
 async function run(args) {
   const keyHome = args.keyDir || process.env.HOLIDAY_GUIDE_KEY_DIR || homedir()
   if (args.probeKeys) {
-    const names = [...new Set([args.provider, args.fallbackProvider, 'dashscope', 'zhipu', 'siliconflow'])]
+    const names = [...new Set([args.provider, args.fallbackProvider, 'opencode', 'zhipu', 'siliconflow'])]
     let found = 0
+    let primaryFound = false
     for (const name of names) {
       const provider = PROVIDERS[name]
       if (!provider) continue
-      const p = { ...provider, keyFile: join(keyHome, `.${name}.key`) }
+      const p = { ...provider, keyFile: provider.absoluteKeyFile ? provider.keyFile : join(keyHome, `.${name}.key`) }
       const key = detectKey(p, args.apiKey, args.keyFile, keyHome)
       console.log(`[probe] ${name} (${p.model}) ${key ? 'OK ' + mask(key) : 'MISSING'} | ${p.keyFile}`)
-      if (key) found++
+      if (key) {
+        found++
+        if (name === args.provider) primaryFound = true
+      }
     }
-    console.log(`[probe] keyDir=${keyHome} found=${found}`)
-    process.exit(found > 0 ? 0 : 1)
+    console.log(`[probe] keyDir=${keyHome} found=${found} primary=${primaryFound}`)
+    process.exit(args.requirePrimary ? (primaryFound ? 0 : 1) : (found > 0 ? 0 : 1))
   }
-  const entries = buildEntries()
+
+  if (args.fresh && (args.assembleOnly || args.validateOnly)) {
+    console.error('[gen-real] --fresh 不能与 --assemble-only / --validate-only 同时使用（会先移走 partial）')
+    process.exit(1)
+  }
+
+  const facts = resolveFacts(args)
+  // 同月 facts 里的法定天数（如国庆 7 天）要参与节日窗口，否则生成内容与官方安排不一致
+  const legalSpans = facts?.month === args.month
+    ? Object.fromEntries((facts.holidays || []).map(h => [h.slug, { days: h.days, isLegal: h.isLegal }]))
+    : {}
+  const holidays = buildHolidayWindow(args.month, { legalSpans })
+  const entries = buildEntries(holidays)
   const outDir = join(DATA_ROOT, args.month)
   const partialDir = join(outDir, 'partial')
   const outPath = join(outDir, 'guides.json')
   const failedPath = join(outDir, 'failed.jsonl')
   const baselineMonth = resolveBaseline(args)
 
-  console.log(`[gen-real] 目标月份 ${args.month} | 任务数 ${entries.length}（${DESTINATIONS.length} 目的地 × ${HOLIDAYS.length} 节日）| 分段 ${args.segments} 段`)
+  console.log(`[gen-real] 目标月份 ${args.month} | 任务数 ${entries.length}（${DESTINATIONS.length} 目的地 × ${holidays.length} 节日）| 分段 ${args.segments} 段`)
+  console.log(`[gen-real] 节日窗口: ${holidays.map(h => `${h.name} ${h.date}`).join(' | ')}`)
   console.log(`[gen-real] 输出目录 ${outDir}`)
   mkdirSync(outDir, { recursive: true }) // 提前建目录：failed.jsonl / partial 写入不再依赖后续步骤
+
+  if (args.fresh && existsSync(partialDir)) {
+    const stamp = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)
+    const backup = join(outDir, `partial.bak-${stamp}`)
+    renameSync(partialDir, backup)
+    console.log(`[fresh] 旧 partial 已移到 ${backup}`)
+  }
+
+  if (facts) {
+    const destCount = Object.keys(facts.destinations || {}).length
+    console.log(`[facts] 使用事实底稿：${destCount} 个目的地（${facts.generatedAt || '未知时间'}）`)
+    if (facts.warnings?.length) console.warn(`[facts] ${facts.warnings.length} 条 warning`)
+  } else {
+    console.warn('[facts] 未使用事实底稿，按纯 LLM 生成')
+  }
+
   const baseline = loadBaseline(baselineMonth)
   if (!baseline && args.baseline !== 'none') console.warn('[gen-real] 无兜底数据：生成失败的篇目将缺失（可用 --baseline <yyyyMM> 指定）')
 
   // ---------- 校验模式 ----------
   if (args.validateOnly) {
-    const report = validateAll(entries, partialDir, baseline)
+    const validateEntries = args.only ? entries.filter(e => e.externalId === args.only) : entries
+    if (args.only && !validateEntries.length) {
+      console.error(`[validate] 未找到 externalId=${args.only}`)
+      process.exit(1)
+    }
+    const report = validateAll(validateEntries, partialDir, baseline, holidays, args.month, args.maxContent)
     if (!report.ok) {
       console.error(`[validate] ${report.errors.length} 个失败：`)
       for (const e of report.errors.slice(0, 30)) console.error(`  - ${e}`)
@@ -652,9 +746,13 @@ async function run(args) {
 
   // ---------- 组装模式（不调 LLM） ----------
   if (args.assembleOnly) {
-    const built = buildDoc(entries, partialDir, baseline, baselineMonth)
+    const built = buildDoc(entries, partialDir, baseline, baselineMonth, holidays, args.month)
     if (built.missing.length) {
       console.error(`[assemble] 缺 ${built.missing.length} 篇且无兜底: ${built.missing.slice(0, 5).join(', ')}…`)
+      process.exit(1)
+    }
+    if (args.allowReuse !== null && built.reused > args.allowReuse) {
+      console.error(`[assemble] 兜底复用 ${built.reused} 篇 > 允许上限 ${args.allowReuse}，拒绝写 guides.json`)
       process.exit(1)
     }
     mkdirSync(outDir, { recursive: true })
@@ -668,7 +766,7 @@ async function run(args) {
   for (const name of [args.provider, args.noFallback ? null : args.fallbackProvider].filter(Boolean)) {
     const provider = PROVIDERS[name]
     if (!provider) { console.error(`未知 provider: ${name}，可选 ${Object.keys(PROVIDERS).join('/')}`); process.exit(1) }
-    const p = { ...provider, keyFile: join(keyHome, `.${name}.key`) }
+    const p = { ...provider, keyFile: provider.absoluteKeyFile ? provider.keyFile : join(keyHome, `.${name}.key`) }
     if (args.model && name === args.provider) p.model = args.model
     const key = detectKey(p, args.apiKey, args.keyFile, keyHome)
     channels.push({ name, provider: p, key, usage: 0, errors: 0, error: key ? null : '未找到 API key' })
@@ -683,8 +781,9 @@ async function run(args) {
 
   if (args.dryRun) {
     const seg = SEGMENT_PLAN[args.segments][0]
+    const factsBlock = facts ? factsPromptBlock(facts, entries[0].dest.slug) : ''
     console.log(`[dry-run] 首段 system:\n${SEG_SYSTEM(entries[0]).slice(0, 300)}...`)
-    console.log(`[dry-run] 首段 user:\n${buildSegmentPrompt(entries[0], seg, '', [], args.month)}`)
+    console.log(`[dry-run] 首段 user:\n${buildSegmentPrompt(entries[0], seg, '', [], args.month, factsBlock)}`)
     return
   }
 
@@ -695,8 +794,8 @@ async function run(args) {
     console.log(`[smoke] 通道体检：${args.smoke}（${usable.map(c => c.name).join(' → ')}）`)
     // smoke 必须真实调用通道，不能复用旧 partial，否则 key 失效时会被误判为通过
     try {
-      const guide = await generateOne(entry, { channels: usable, avoidTitles: [], month: args.month, segments: args.segments, index: entries.indexOf(entry) })
-      const errors = validateGuide(entry, guide)
+      const guide = await generateOne(entry, { channels: usable, avoidTitles: [], month: args.month, segments: args.segments, index: entries.indexOf(entry), holidays, facts })
+      const errors = validateGuide(entry, guide, holidays, args.month, args.maxContent)
       if (errors.length) throw new Error(`字段校验失败: ${errors.join('; ')}`)
       writePartial(partialDir, entry.externalId, guide)
       console.log(`[smoke] 通过 ✓ 正文 ${stripHtml(guide.content).length} 字，title=${guide.title}`)
@@ -721,12 +820,12 @@ async function run(args) {
     while (queue.length) {
       const entry = queue.shift()
       const partial = readPartial(partialDir, entry.externalId)
-      if (partial && !validateGuide(entry, partial).length) { skipped++; continue }
+      if (partial && !validateGuide(entry, partial, holidays, args.month, args.maxContent).length) { skipped++; continue }
       const avoidTitles = (titlesByDest.get(entry.dest.slug) || []).slice(-5)
       try {
         console.log(`[${done + skipped + failed + 1}/${targets.length}] 生成 ${entry.externalId}（${entry.dest.name}×${entry.hol.name}，${entry.days}天，${entry.theme}）`)
-        const guide = await generateOne(entry, { channels: usable, avoidTitles, month: args.month, segments: args.segments, index: entries.indexOf(entry) })
-        const errors = validateGuide(entry, guide)
+        const guide = await generateOne(entry, { channels: usable, avoidTitles, month: args.month, segments: args.segments, index: entries.indexOf(entry), holidays, facts })
+        const errors = validateGuide(entry, guide, holidays, args.month, args.maxContent)
         if (errors.length) throw new Error(`字段校验失败: ${errors.join('; ')}`)
         writePartial(partialDir, entry.externalId, guide)
         if (!titlesByDest.has(entry.dest.slug)) titlesByDest.set(entry.dest.slug, [])
@@ -749,16 +848,20 @@ async function run(args) {
   if (failed) console.log(`[gen-real] 失败篇目: ${failedIds.join(', ')}（将从兜底 ${baselineMonth ?? '无'} 补齐）`)
 
   // ---------- 校验 + 组装 ----------
-  const report = validateAll(entries, partialDir, baseline)
+  const report = validateAll(entries, partialDir, baseline, holidays, args.month, args.maxContent)
   if (!report.ok) {
     console.error(`[gen-real] validate 未通过（${report.errors.length} 个）：`)
     for (const e of report.errors.slice(0, 30)) console.error(`  - ${e}`)
     console.error('[gen-real] 未写 guides.json；可 --only <id> 补跑或调整参数后重跑')
     process.exit(1)
   }
-  const built = buildDoc(entries, partialDir, baseline, baselineMonth)
+  const built = buildDoc(entries, partialDir, baseline, baselineMonth, holidays, args.month)
   if (built.missing.length) {
     console.error(`[gen-real] 缺 ${built.missing.length} 篇且无兜底，未写 guides.json`)
+    process.exit(1)
+  }
+  if (args.allowReuse !== null && built.reused > args.allowReuse) {
+    console.error(`[gen-real] 兜底复用 ${built.reused} 篇 > 允许上限 ${args.allowReuse}，未写 guides.json`)
     process.exit(1)
   }
   mkdirSync(outDir, { recursive: true })

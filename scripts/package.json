@@ -1,0 +1,10 @@
+{
+  "name": "holiday-guide-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Monthly data generation, fact verification and image refresh tooling",
+  "type": "module",
+  "dependencies": {
+    "lunar-javascript": "^1.7.0"
+  }
+}

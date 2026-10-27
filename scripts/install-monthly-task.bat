@@ -31,11 +31,15 @@ if errorlevel 1 (echo [ERROR] create %T2% failed & exit /b 1)
 
 echo.
 echo [OK] registered:
-schtasks /Query /TN "%T1%" /FO LIST | findstr /i "TaskName Next Status"
-schtasks /Query /TN "%T2%" /FO LIST | findstr /i "TaskName Next Status"
+schtasks /Query /TN "%T1%" /V /FO LIST
+schtasks /Query /TN "%T2%" /V /FO LIST
 echo.
+echo Verify SYSTEM key/paths without an LLM call:
+echo   "%BAT%" --probe
+echo   powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0probe-monthly-task-elevated.ps1"
 echo Manual run now : schtasks /Run /TN "%T1%"
 echo Force rebuild  : "%BAT%" --force
+echo Fresh rebuild  : "%BAT%" --fresh --force
 exit /b 0
 
 :remove

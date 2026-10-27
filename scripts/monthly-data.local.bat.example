@@ -4,9 +4,23 @@ rem monthly-data.local.bat is gitignored and never committed.
 rem
 rem KEYDIR            directory containing .zhipu.key / .siliconflow.key / .dashscope.key
 rem PUBDIR            target folder consumed by HolidayGuideUpdater (data/{yyyyMM}/guides.json)
-rem PRIMARY_PROVIDER  zhipu (free) | dashscope (paid) | siliconflow (free, lower quality)
+rem PRIMARY_PROVIDER  opencode (deepseek-v4.1-flash) | zhipu (free) | siliconflow (free, lower quality)
 rem FALLBACK_PROVIDER fallback when the primary channel fails a piece
+rem OPENCODE_KEY_FILE absolute OpenCode key path (used when PROVIDER=opencode)
+rem NODE_EXE          absolute node.exe path for SYSTEM scheduled tasks (optional)
+rem BASELINE          auto | none | yyyyMM (default auto)
+rem ALLOW_REUSE       max baseline-reused guides; use 0 for a full fresh refresh (optional)
+rem PUBLISH_WWWROOT   production wwwroot, e.g. F:\HolidayGuide\publish\backend\wwwroot (optional)
+rem REFRESH_IMAGES    1 = refresh Wikimedia Commons covers before generation; 0 = skip
+rem FACTS             1 = refresh Wikivoyage/官方节假日 facts; 0 = skip
 set "KEYDIR=%USERPROFILE%"
 set "PUBDIR=%~dp0..\publish\updater\data"
-set "PRIMARY_PROVIDER=zhipu"
-set "FALLBACK_PROVIDER=siliconflow"
+set "PRIMARY_PROVIDER=opencode"
+set "FALLBACK_PROVIDER=zhipu"
+set "OPENCODE_KEY_FILE=F:\HolidayGuide\secrets\opencode.key"
+rem set "NODE_EXE=C:\Program Files\nodejs\node.exe"
+rem set "BASELINE=auto"
+rem set "ALLOW_REUSE="
+rem set "PUBLISH_WWWROOT=F:\HolidayGuide\publish\backend\wwwroot"
+set "REFRESH_IMAGES=1"
+set "FACTS=1"

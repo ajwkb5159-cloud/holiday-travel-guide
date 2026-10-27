@@ -9,11 +9,15 @@
 holiday-travel-guide-web/node_modules/
 holiday-travel-guide-web/dist/
 
+# Script-side dependencies (lunar-javascript)
+scripts/node_modules/
+
 # Generated frontend bundle (built into the backend)
 HolidayGuideBackend/wwwroot/
 
 # Runtime data (never commit databases / logs / updater state)
-**/Data/
+# 注意：不要用 **/Data/ —— Windows 大小写不敏感，会把 scripts/data/ 清单也忽略
+HolidayGuideBackend/Data/
 HolidayGuideUpdater/data/
 HolidayGuideUpdater/logs/
 **/logs/

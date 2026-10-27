@@ -1,0 +1,736 @@
+{
+  "version": 1,
+  "note": "Wikimedia Commons 景点图搜索清单。每个城市 10 个 slot，与 /images/destinations/{slug}-01..10.jpg 一一对应。",
+  "allowedLicenses": [
+    "CC0",
+    "Public domain",
+    "CC BY",
+    "CC BY-SA"
+  ],
+  "attractions": [
+    {
+      "slug": "beijing",
+      "name": "北京",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "故宫",
+          "query": "Forbidden City Beijing"
+        },
+        {
+          "slot": 2,
+          "label": "八达岭长城",
+          "query": "Badaling Great Wall"
+        },
+        {
+          "slot": 3,
+          "label": "天坛",
+          "query": "Temple of Heaven Beijing"
+        },
+        {
+          "slot": 4,
+          "label": "颐和园",
+          "query": "Summer Palace Beijing"
+        },
+        {
+          "slot": 5,
+          "label": "南锣鼓巷",
+          "query": "Nanluoguxiang Beijing"
+        },
+        {
+          "slot": 6,
+          "label": "中国国家博物馆",
+          "query": "National Museum of China"
+        },
+        {
+          "slot": 7,
+          "label": "北海公园",
+          "query": "Beihai Park Beijing"
+        },
+        {
+          "slot": 8,
+          "label": "奥林匹克公园",
+          "query": "Beijing Olympic Park"
+        },
+        {
+          "slot": 9,
+          "label": "明十三陵",
+          "query": "Ming Tombs Sacred Way Beijing"
+        },
+        {
+          "slot": 10,
+          "label": "前门大街",
+          "query": "Qianmen Street Beijing"
+        }
+      ]
+    },
+    {
+      "slug": "hangzhou",
+      "name": "杭州",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "西湖",
+          "query": "West Lake Hangzhou"
+        },
+        {
+          "slot": 2,
+          "label": "灵隐寺",
+          "query": "Lingyin Temple Hangzhou"
+        },
+        {
+          "slot": 3,
+          "label": "龙井茶园",
+          "query": "Longjing tea plantation Hangzhou"
+        },
+        {
+          "slot": 4,
+          "label": "西溪湿地",
+          "query": "Xixi Wetland Hangzhou"
+        },
+        {
+          "slot": 5,
+          "label": "河坊街",
+          "query": "Hefang Street Hangzhou"
+        },
+        {
+          "slot": 6,
+          "label": "雷峰塔",
+          "query": "Leifeng Pagoda Hangzhou"
+        },
+        {
+          "slot": 7,
+          "label": "钱塘江",
+          "query": "Qiantang River Hangzhou"
+        },
+        {
+          "slot": 8,
+          "label": "京杭大运河",
+          "query": "Gongchen Bridge"
+        },
+        {
+          "slot": 9,
+          "label": "宋城",
+          "query": "Songcheng Hangzhou"
+        },
+        {
+          "slot": 10,
+          "label": "六和塔",
+          "query": "Six Harmonies Pagoda Hangzhou"
+        }
+      ]
+    },
+    {
+      "slug": "sanya",
+      "name": "三亚",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "亚龙湾",
+          "query": "Yalong Bay Sanya"
+        },
+        {
+          "slot": 2,
+          "label": "天涯海角",
+          "query": "Tianya Haijiao Sanya"
+        },
+        {
+          "slot": 3,
+          "label": "蜈支洲岛",
+          "query": "Wuzhizhou Island Sanya"
+        },
+        {
+          "slot": 4,
+          "label": "南湾猴岛",
+          "query": "Nanwan Monkey Island Sanya"
+        },
+        {
+          "slot": 5,
+          "label": "鹿回头",
+          "query": "Deer Looking Back Statue Sanya"
+        },
+        {
+          "slot": 6,
+          "label": "大东海",
+          "query": "Dadonghai Beach Sanya"
+        },
+        {
+          "slot": 7,
+          "label": "三亚湾",
+          "query": "Sanya Bay"
+        },
+        {
+          "slot": 8,
+          "label": "海棠湾",
+          "query": "Haitang Bay Sanya"
+        },
+        {
+          "slot": 9,
+          "label": "亚龙湾热带天堂森林公园",
+          "query": "Yalong Bay Tropical Paradise Forest Park"
+        },
+        {
+          "slot": 10,
+          "label": "南山文化旅游区",
+          "query": "Nanshan Cultural Tourism Zone Sanya"
+        }
+      ]
+    },
+    {
+      "slug": "chengdu",
+      "name": "成都",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "锦里",
+          "query": "Jinli Chengdu"
+        },
+        {
+          "slot": 2,
+          "label": "武侯祠",
+          "query": "Wuhou Shrine Chengdu"
+        },
+        {
+          "slot": 3,
+          "label": "杜甫草堂",
+          "query": "Du Fu Thatched Cottage garden Chengdu"
+        },
+        {
+          "slot": 4,
+          "label": "宽窄巷子",
+          "query": "Kuanzhai Alley Chengdu"
+        },
+        {
+          "slot": 5,
+          "label": "青城山",
+          "query": "Mount Qingcheng Sichuan"
+        },
+        {
+          "slot": 6,
+          "label": "都江堰",
+          "query": "Dujiangyan Irrigation System"
+        },
+        {
+          "slot": 7,
+          "label": "川剧",
+          "query": "Sichuan opera Chengdu"
+        },
+        {
+          "slot": 8,
+          "label": "成都茶馆",
+          "query": "Chengdu teahouse"
+        },
+        {
+          "slot": 9,
+          "label": "四川火锅",
+          "query": "Sichuan hotpot Chengdu"
+        },
+        {
+          "slot": 10,
+          "label": "大熊猫繁育研究基地",
+          "query": "Chengdu Research Base of Giant Panda Breeding"
+        }
+      ]
+    },
+    {
+      "slug": "xian",
+      "name": "西安",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "西安城墙",
+          "query": "Xi'an City Wall"
+        },
+        {
+          "slot": 2,
+          "label": "西安钟楼",
+          "query": "Bell Tower Xi'an"
+        },
+        {
+          "slot": 3,
+          "label": "西安鼓楼",
+          "query": "Drum Tower Xi'an"
+        },
+        {
+          "slot": 4,
+          "label": "大雁塔",
+          "query": "Giant Wild Goose Pagoda Xi'an"
+        },
+        {
+          "slot": 5,
+          "label": "陕西历史博物馆",
+          "query": "Shaanxi History Museum"
+        },
+        {
+          "slot": 6,
+          "label": "回民街",
+          "query": "Muslim Quarter Xi'an"
+        },
+        {
+          "slot": 7,
+          "label": "华清宫",
+          "query": "Huaqing Palace Xi'an"
+        },
+        {
+          "slot": 8,
+          "label": "大唐芙蓉园",
+          "query": "Tang Paradise Xi'an"
+        },
+        {
+          "slot": 9,
+          "label": "大唐不夜城",
+          "query": "Datang Everbright City Xi'an night"
+        },
+        {
+          "slot": 10,
+          "label": "秦始皇兵马俑",
+          "query": "Terracotta Army Xi'an"
+        }
+      ]
+    },
+    {
+      "slug": "guangzhou",
+      "name": "广州",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "陈家祠",
+          "query": "Chen Clan Ancestral Hall Guangzhou"
+        },
+        {
+          "slot": 2,
+          "label": "沙面岛",
+          "query": "Shamian Island Guangzhou"
+        },
+        {
+          "slot": 3,
+          "label": "白云山",
+          "query": "Baiyun Mountain Guangzhou"
+        },
+        {
+          "slot": 4,
+          "label": "越秀公园",
+          "query": "Yuexiu Park Guangzhou"
+        },
+        {
+          "slot": 5,
+          "label": "北京路步行街",
+          "query": "Beijing Road Guangzhou"
+        },
+        {
+          "slot": 6,
+          "label": "珠江夜游",
+          "query": "Pearl River Guangzhou night"
+        },
+        {
+          "slot": 7,
+          "label": "广州大剧院",
+          "query": "Guangzhou Opera House"
+        },
+        {
+          "slot": 8,
+          "label": "荔湾区",
+          "query": "Liwan District Guangzhou"
+        },
+        {
+          "slot": 9,
+          "label": "广州塔",
+          "query": "Canton Tower night Guangzhou"
+        },
+        {
+          "slot": 10,
+          "label": "长隆旅游度假区",
+          "query": "Chimelong Safari Park Guangzhou"
+        }
+      ]
+    },
+    {
+      "slug": "haerbin",
+      "name": "哈尔滨",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "哈尔滨冰雪大世界",
+          "query": "Harbin Ice and Snow World"
+        },
+        {
+          "slot": 2,
+          "label": "圣索菲亚教堂",
+          "query": "Saint Sophia Cathedral Harbin"
+        },
+        {
+          "slot": 3,
+          "label": "中央大街",
+          "query": "Central Street Harbin"
+        },
+        {
+          "slot": 4,
+          "label": "松花江",
+          "query": "Songhua River Harbin"
+        },
+        {
+          "slot": 5,
+          "label": "太阳岛",
+          "query": "Sun Island Harbin"
+        },
+        {
+          "slot": 6,
+          "label": "东北虎林园",
+          "query": "Siberian Tiger Park Harbin"
+        },
+        {
+          "slot": 7,
+          "label": "哈尔滨大剧院",
+          "query": "Harbin Opera House"
+        },
+        {
+          "slot": 8,
+          "label": "兆麟公园",
+          "query": "Zhaolin Park Harbin"
+        },
+        {
+          "slot": 9,
+          "label": "黑龙江省博物馆",
+          "query": "Heilongjiang Provincial Museum building Harbin"
+        },
+        {
+          "slot": 10,
+          "label": "亚布力滑雪场",
+          "query": "Yabuli Ski Resort"
+        }
+      ]
+    },
+    {
+      "slug": "qingdao",
+      "name": "青岛",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "栈桥",
+          "query": "Zhanqiao Pier Qingdao"
+        },
+        {
+          "slot": 2,
+          "label": "八大关",
+          "query": "Badaguan Qingdao"
+        },
+        {
+          "slot": 3,
+          "label": "五四广场",
+          "query": "May Fourth Square Qingdao"
+        },
+        {
+          "slot": 4,
+          "label": "青岛啤酒博物馆",
+          "query": "Tsingtao Beer Museum"
+        },
+        {
+          "slot": 5,
+          "label": "崂山",
+          "query": "Laoshan Mountain Qingdao"
+        },
+        {
+          "slot": 6,
+          "label": "信号山",
+          "query": "Signal Hill Qingdao"
+        },
+        {
+          "slot": 7,
+          "label": "圣弥厄尔教堂",
+          "query": "St Michael Cathedral Qingdao"
+        },
+        {
+          "slot": 8,
+          "label": "金沙滩",
+          "query": "Qingdao Golden Beach Shandong"
+        },
+        {
+          "slot": 9,
+          "label": "青岛奥林匹克帆船中心",
+          "query": "Qingdao Olympic Sailing Center"
+        },
+        {
+          "slot": 10,
+          "label": "小鱼山公园",
+          "query": "Xiaoyushan Park Qingdao"
+        }
+      ]
+    },
+    {
+      "slug": "shanghai",
+      "name": "上海",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "外滩",
+          "query": "The Bund Shanghai"
+        },
+        {
+          "slot": 2,
+          "label": "豫园",
+          "query": "Yu Garden Shanghai"
+        },
+        {
+          "slot": 3,
+          "label": "东方明珠",
+          "query": "Oriental Pearl Tower Shanghai"
+        },
+        {
+          "slot": 4,
+          "label": "上海中心大厦",
+          "query": "Shanghai Tower"
+        },
+        {
+          "slot": 5,
+          "label": "上海迪士尼乐园",
+          "query": "Shanghai Disneyland Enchanted Storybook Castle"
+        },
+        {
+          "slot": 6,
+          "label": "静安寺",
+          "query": "Jing'an Temple Shanghai building"
+        },
+        {
+          "slot": 7,
+          "label": "田子坊",
+          "query": "Tianzifang Shanghai"
+        },
+        {
+          "slot": 8,
+          "label": "新天地",
+          "query": "Xintiandi Shanghai"
+        },
+        {
+          "slot": 9,
+          "label": "武康路",
+          "query": "Wukang Road Shanghai"
+        },
+        {
+          "slot": 10,
+          "label": "上海博物馆",
+          "query": "Shanghai Museum"
+        }
+      ]
+    },
+    {
+      "slug": "chongqing",
+      "name": "重庆",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "解放碑",
+          "query": "Jiefangbei Chongqing"
+        },
+        {
+          "slot": 2,
+          "label": "长江索道",
+          "query": "Yangtze River Cableway Chongqing"
+        },
+        {
+          "slot": 3,
+          "label": "磁器口",
+          "query": "Ciqikou Ancient Town Chongqing"
+        },
+        {
+          "slot": 4,
+          "label": "武隆喀斯特",
+          "query": "Wulong Three Natural Bridges"
+        },
+        {
+          "slot": 5,
+          "label": "大足石刻",
+          "query": "Dazu Rock Carvings"
+        },
+        {
+          "slot": 6,
+          "label": "南滨路",
+          "query": "Nanbin Road Chongqing"
+        },
+        {
+          "slot": 7,
+          "label": "鹅岭公园",
+          "query": "Eling Park Chongqing"
+        },
+        {
+          "slot": 8,
+          "label": "魁星楼",
+          "query": "Chongqing night skyline"
+        },
+        {
+          "slot": 9,
+          "label": "洪崖洞",
+          "query": "Hongya Cave Chongqing"
+        },
+        {
+          "slot": 10,
+          "label": "重庆中国三峡博物馆",
+          "query": "Three Gorges Museum Chongqing"
+        }
+      ]
+    },
+    {
+      "slug": "xiamen",
+      "name": "厦门",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "鼓浪屿",
+          "query": "Gulangyu Island Xiamen view"
+        },
+        {
+          "slot": 2,
+          "label": "南普陀寺",
+          "query": "Nanputuo Temple Xiamen"
+        },
+        {
+          "slot": 3,
+          "label": "厦门大学",
+          "query": "Xiamen University Fujian campus"
+        },
+        {
+          "slot": 4,
+          "label": "环岛路",
+          "query": "Huandao Road Xiamen"
+        },
+        {
+          "slot": 5,
+          "label": "曾厝垵",
+          "query": "曾厝垵"
+        },
+        {
+          "slot": 6,
+          "label": "集美学村",
+          "query": "Jimei School Village Xiamen"
+        },
+        {
+          "slot": 7,
+          "label": "厦门园林植物园",
+          "query": "Xiamen Botanical Garden"
+        },
+        {
+          "slot": 8,
+          "label": "厦门轮渡",
+          "query": "Xiamen Ferry"
+        },
+        {
+          "slot": 9,
+          "label": "胡里山炮台",
+          "query": "Hulishan Fortress Xiamen"
+        },
+        {
+          "slot": 10,
+          "label": "五缘湾",
+          "query": "Wuyuan Bay Xiamen"
+        }
+      ]
+    },
+    {
+      "slug": "guilin",
+      "name": "桂林",
+      "slots": [
+        {
+          "slot": 1,
+          "label": "漓江",
+          "query": "Li River Guilin"
+        },
+        {
+          "slot": 2,
+          "label": "象鼻山",
+          "query": "Elephant Trunk Hill Guilin landmark"
+        },
+        {
+          "slot": 3,
+          "label": "阳朔西街",
+          "query": "Yangshuo West Street"
+        },
+        {
+          "slot": 4,
+          "label": "龙脊梯田",
+          "query": "Longji Rice Terraces"
+        },
+        {
+          "slot": 5,
+          "label": "芦笛岩",
+          "query": "Reed Flute Cave Guilin"
+        },
+        {
+          "slot": 6,
+          "label": "两江四湖",
+          "query": "Two Rivers Four Lakes Guilin"
+        },
+        {
+          "slot": 7,
+          "label": "遇龙河",
+          "query": "Yulong River Yangshuo"
+        },
+        {
+          "slot": 8,
+          "label": "兴坪古镇",
+          "query": "Xingping Guilin Li River"
+        },
+        {
+          "slot": 9,
+          "label": "七星公园",
+          "query": "Seven Star Park Guilin"
+        },
+        {
+          "slot": 10,
+          "label": "靖江王城",
+          "query": "Jingjiang Prince City Guilin"
+        }
+      ]
+    }
+  ],
+  "holidays": [
+    {
+      "slug": "qixi",
+      "name": "七夕",
+      "query": "Women at the Qixi Festival"
+    },
+    {
+      "slug": "zhongqiu",
+      "name": "中秋节",
+      "query": "Mid-Autumn Festival mooncake lantern"
+    },
+    {
+      "slug": "guoqing",
+      "name": "国庆节",
+      "query": "Tiananmen Square National Day China"
+    },
+    {
+      "slug": "chongyang",
+      "name": "重阳节",
+      "query": "Chrysanthemum festival China"
+    },
+    {
+      "slug": "shengdan",
+      "name": "圣诞节",
+      "query": "Christmas tree lights"
+    },
+    {
+      "slug": "yuandan",
+      "name": "元旦",
+      "query": "New Year fireworks city"
+    },
+    {
+      "slug": "chunjie",
+      "name": "春节",
+      "query": "Chinese New Year lanterns China"
+    },
+    {
+      "slug": "qingming",
+      "name": "清明节",
+      "query": "Qingming Festival spring China"
+    },
+    {
+      "slug": "laodong",
+      "name": "劳动节",
+      "query": "May Day holiday China travel"
+    },
+    {
+      "slug": "duanwu",
+      "name": "端午节",
+      "query": "Dragon boat race China"
+    }
+  ]
+}
